@@ -1,0 +1,9 @@
+node_modules/
+teardown-out/
+models/
+*.mp4
+# manufacturers' manuals and passports: not ours to republish, kept only locally
+docs/*.pdf
+# the page is published as index.html
+Насос Ш80-2,5.html
+.claude/

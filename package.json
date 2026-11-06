@@ -1,0 +1,9 @@
+{
+  "name": "teardown-3d",
+  "private": true,
+  "description": "Teardown simulators: Sh80-2.5 gear pump",
+  "dependencies": {
+    "three-bvh-csg": "0.0.18",
+    "three-mesh-bvh": "0.9.18"
+  }
+}
