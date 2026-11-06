@@ -30,7 +30,7 @@ const PLAYS = [1 / 60, 1 / 40, 1 / 20, 1 / 10, 1 / 5, 1 / 2, 1];
 const playText = (p) => (p >= 1 ? '1 : 1' : `1 / ${Math.round(1 / p)}`);
 
 const CSS = (top) => `
-html,body{background:#ecedef;overflow:hidden}
+html,body{background:#ecedef;overflow:hidden;position:fixed;inset:0;margin:0}
 #app{position:absolute!important;inset:auto!important;left:0;top:0;width:${W}px;height:${H}px;transform-origin:0 0}
 #gl{touch-action:none;cursor:grab}
 #gl.drag{cursor:grabbing}
@@ -47,6 +47,8 @@ html,body{background:#ecedef;overflow:hidden}
 `;
 
 export function runLive() {
+  // a phone must not zoom out to the 1600 px stage: the stage is scaled to the screen by fit() instead
+  document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover');
   const top = Number(document.body.dataset.top || 0);
   const style = document.createElement('style');
   style.textContent = CSS(top);

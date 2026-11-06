@@ -7,3 +7,4 @@ docs/*.pdf
 # the page is published as index.html
 Насос Ш80-2,5.html
 .claude/
+publish.ps1
