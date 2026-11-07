@@ -9,7 +9,7 @@ import {GENSET, VFD} from './supply.js';
 import {ALT, cylPsi, ENGINE, strokeOf} from './genset.js';
 import {LOAD, T9, TRAILER} from './truck.js';
 import {FILTER, HOSE, suctionBudget} from './pipes.js';
-import {KTANK, OIL, PLAN} from './transfer.js';
+import {OIL, PLAN, VESSELS} from './transfer.js';
 import {OIL_COL} from './site.js';
 import {DA, fillOf, flow, G, gapPressure, keyOf, P_MAX, PHASES, phaseOf, Q_REV_CM3, RATED, SEAL, travelU} from './kin.js';
 
@@ -465,8 +465,8 @@ export function createConsole(app, siteState = () => ({})) {
   // ------------------------------------------------------------ the transfer's overlay: levels, progress, the oil, the lines, the totals
   tag = 'site';
   add(`<div style="position:absolute;left:35px;top:33px;width:43px;height:3px;background:${C.red}"></div>`);
-  add(`<div style="position:absolute;left:35px;top:45px;font-size:24px;font-weight:700;letter-spacing:-.2px">Перекачка И-20А <span style="color:${C.red}">·</span> резервуар → бензовоз</div>`);
-  add(`<div class="cp" style="position:absolute;left:35px;top:81px;font-weight:500;letter-spacing:1.4px;font-size:9.2px">РЕЗЕРВУАР 80 М³ → РУКАВ → Ш80-2,5 → РУКАВ → КАМАЗ 8 М³ &nbsp;•&nbsp; ВРЕМЯ ×${PLAN.accel}</div>`);
+  add(`<div style="position:absolute;left:35px;top:45px;font-size:24px;font-weight:700;letter-spacing:-.2px">Перекачка И-20А <span style="color:${C.red}">·</span> резервуар → 4 бензовоза</div>`);
+  add(`<div class="cp" style="position:absolute;left:35px;top:81px;font-weight:500;letter-spacing:1.4px;font-size:9.2px">ОДИН НАСОС Ш80-2,5 · ПО ОЧЕРЕДИ: КАМАЗ 8 М³ → 3 × SCANIA 20 М³ &nbsp;•&nbsp; ВРЕМЯ ×${PLAN.accel}</div>`);
   const trBig = add(`<div style="position:absolute;left:33px;top:103px;font-size:56px;font-weight:800;letter-spacing:-3px;color:${C.red};line-height:1"></div>`);
   add(`<div style="position:absolute;left:265px;top:141px;font-size:11px;font-weight:500">100</div>`);
   add(`<div style="position:absolute;left:35px;top:166px;width:247px;height:6px;border:1px solid ${C.faint};border-top:none"></div>`);
@@ -478,11 +478,11 @@ export function createConsole(app, siteState = () => ({})) {
   const trLabel = add(`<div style="position:absolute;left:35px;top:213px;font-size:12.5px;font-weight:500"></div>`);
   add(`<div class="cp" style="position:absolute;left:0;right:0;top:36px;display:flex;justify-content:center;gap:16px;font-weight:500;font-size:9.4px">
     ${[['МАСЛО И-20А', OIL_COL], ['ВСАСЫВАНИЕ', C.blue], ['НАГНЕТАНИЕ', C.orange]].map(([n, c]) => `<span><i style="display:inline-block;width:15px;height:2.4px;background:${c};vertical-align:middle;margin-right:6px"></i>${n}</span>`).join('')}</div>`);
-  // the two vessels with their levels
+  // the storage tank and the four tankers with their levels
   add(`<div class="pn" style="left:35px;top:274px;width:247px;height:208px"></div>`);
   add(`<div class="cp" style="position:absolute;left:46px;top:286px;font-weight:700">УРОВНИ</div>`);
   const lvSvg = add(`<svg style="position:absolute;left:46px;top:300px" width="226" height="176"></svg>`);
-  // the run: volume in the tanker against time
+  // the run: the volume in each tanker against time
   add(`<div class="pn" style="left:35px;top:490px;width:247px;height:192px"></div>`);
   add(`<div class="cp" style="position:absolute;left:46px;top:502px;font-weight:700">ХОД ПЕРЕКАЧКИ</div>`);
   const runTag = add(`<div class="cp mu" style="position:absolute;right:${1600 - 271}px;top:502px;font-weight:500"></div>`);
@@ -497,12 +497,12 @@ export function createConsole(app, siteState = () => ({})) {
       return r.lastElementChild;
     });
   };
-  const oilRows = sRows(36, 209, `МАСЛО ${OIL.name} · ${OIL.gost}`, ['Плотность при 20 °С', 'Вязкость при 40 °С', 'Вязкость при 20 °С', 'Температура застывания', 'Температура вспышки', 'Масса в КАМАЗе', 'Масса в резервуаре']);
-  const hydRows = sRows(252, 184, 'ГИДРАВЛИКА ЛИНИИ', ['Подача насоса', 'Скорость в рукаве', 'Режим течения', 'Подпор на входе', 'Давление вход / выход', 'Потери вход / выход']);
-  const totRows = sRows(443, 214, 'ИТОГ ПЕРЕКАЧКИ', ['Налить в КАМАЗ (95 %)', 'Время налива', 'Мощность из сети', 'Электроэнергия', 'Дизель на ДГУ', 'Резервуар после', 'Перекачек из резервуара']);
-  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:795px;text-align:center;font-weight:500"><span style="color:${C.ink}">НАЛИВ</span> &nbsp;— &nbsp;ВРЕМЯ УСКОРЕНО ×${PLAN.accel}; ШАРИКИ В РУКАВАХ ПОКАЗЫВАЮТ НАПРАВЛЕНИЕ, НЕ СКОРОСТЬ</div>`);
+  const oilRows = sRows(36, 209, `МАСЛО ${OIL.name} · ${OIL.gost}`, ['Плотность при 20 °С', 'Вязкость при 40 °С', 'Вязкость при 20 °С', 'Температура застывания', 'Температура вспышки', 'Масса в машинах', 'Масса в резервуаре']);
+  const hydRows = sRows(252, 184, 'ГИДРАВЛИКА ЛИНИИ', ['Сейчас наливается', 'Подача насоса', 'Скорость в рукаве', 'Режим течения', 'Давление вход / выход', 'Потери вход / выход']);
+  const totRows = sRows(443, 214, 'ИТОГ ПЕРЕКАЧКИ · 95 % КАЖДОЙ', [...VESSELS.map((ve) => `${ve.name} · ${ve.cap} м³`), 'Всего · время', 'кВт·ч · дизель ДГУ', 'Резервуар после']);
+  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:795px;text-align:center;font-weight:500"><span style="color:${C.ink}">НАЛИВ</span> &nbsp;— &nbsp;ВРЕМЯ УСКОРЕНО ×${PLAN.accel}; МЕЖДУ МАШИНАМИ ${PLAN.swap / 60} МИН НА ПЕРЕСТАНОВКУ РУКАВА</div>`);
   const trLine = add(`<div style="position:absolute;left:0;right:0;top:816px;text-align:center;font-size:14px;font-weight:600"></div>`);
-  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:855px;text-align:center;font-weight:500">РАЗРЕЗ И СТЕКЛО ПОКАЗЫВАЮТ МАСЛО В РЕЗЕРВУАРЕ, ЦИСТЕРНЕ И РУКАВАХ · T — НАЧАТЬ ЗАНОВО</div>`);
+  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:855px;text-align:center;font-weight:500">РАЗРЕЗ И СТЕКЛО ПОКАЗЫВАЮТ МАСЛО В РЕЗЕРВУАРЕ, ЦИСТЕРНАХ И РУКАВАХ · T — НАЧАТЬ ЗАНОВО</div>`);
   add(`<div class="cp" style="position:absolute;left:0;right:0;top:874px;text-align:center;font-weight:500;color:${C.faint}">ТЯНИ — ПОВОРОТ &nbsp;·&nbsp; КОЛЕСО — МАСШТАБ &nbsp;·&nbsp; H — СКРЫТЬ ПАНЕЛИ</div>`);
   const byMode = [...ui.querySelectorAll('[data-m]')];
   let modeNow = '';
@@ -529,71 +529,96 @@ export function createConsole(app, siteState = () => ({})) {
   };
 
   /** the transfer's panels from its state s.tr (transfer.js) */
-  const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+  const mmss = (sec) => {
+    const r = Math.round(sec);
+    const h = Math.floor(r / 3600);
+    const m = Math.floor((r % 3600) / 60);
+    const ss = String(r % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+  };
+  const VCOL = ['#c9952b', '#d4542a', '#9d3d8f', '#2f6db3'];
   const drawSite = (s) => {
     const tr = s.tr;
     const pct = tr.progress * 100;
     trBig.textContent = `${Math.round(pct)}`;
     trFill.style.width = `${Math.min(247, (pct / 100) * 247).toFixed(1)}px`;
-    trLabel.textContent = tr.running ? 'КАМАЗ заполнен на, % от 7,6 м³' : 'КАМАЗ налит — насос остановлен';
-    // the vessels: the storage tank upright on the left, the tanker's ellipse on the right, both to their own scale
+    const cur = VESSELS[tr.cur];
+    trLabel.innerHTML = tr.phase === 'fill' ? `Налито всего, % от ${f1(tr.totalEnd)} м³ · <b style="color:${C.red}">${cur.name}</b> ${Math.round(tr.curProgress * 100)} %` : tr.phase === 'swap' ? `Рукав переставляют на <b style="color:${C.red}">${cur.name}</b> · ${mmss(tr.swapLeft)}` : 'Все четыре машины налиты — насос остановлен';
+    // the storage tank upright on the left, the four tankers' sections on the right (2 × 2), each to its own scale
     {
       let h = '';
-      const tx = 14;
-      const ty = 20;
-      const tw = 90;
-      const th = 120;
+      const tx = 6;
+      const ty = 22;
+      const tw = 62;
+      const th = 118;
       const fill = (tr.vRes / PLAN.resCap) * th;
       h += `<rect x="${tx}" y="${ty}" width="${tw}" height="${th}" fill="#fff" stroke="${C.ink}" stroke-width="1.2"/><rect x="${tx + 1}" y="${(ty + th - fill).toFixed(1)}" width="${tw - 2}" height="${fill.toFixed(1)}" fill="${OIL_COL}" opacity=".85"/>`;
-      h += `<path d="M${tx} ${ty} L${tx + tw / 2} ${ty - 12} L${tx + tw} ${ty}" fill="none" stroke="${C.ink}" stroke-width="1.2"/>`;
-      h += `<text x="${tx + tw / 2}" y="${ty + th + 13}" font-size="7.6" text-anchor="middle" font-weight="700" fill="${C.ink}">${f1(tr.vRes)} м³</text><text x="${tx + tw / 2}" y="${ty + th + 24}" font-size="6.8" text-anchor="middle" fill="${C.mute}">уровень ${f2(tr.resLevel / 1000)} м</text>`;
-      h += `<text x="${tx + tw / 2}" y="${ty - 16}" font-size="6.8" letter-spacing=".8" text-anchor="middle" fill="${C.mute}">РЕЗЕРВУАР 80 М³</text>`;
-      const cx = 172;
-      const cy = 76;
-      const a = 46;
-      const b = 26;
-      const dTop = cy + b - (tr.kamDepth / (2 * KTANK.b)) * 2 * b;
-      h += `<defs><clipPath id="ke"><ellipse cx="${cx}" cy="${cy}" rx="${a}" ry="${b}"/></clipPath></defs>`;
-      h += `<ellipse cx="${cx}" cy="${cy}" rx="${a}" ry="${b}" fill="#fff" stroke="${C.ink}" stroke-width="1.2"/><rect x="${cx - a}" y="${dTop.toFixed(1)}" width="${2 * a}" height="${(cy + b - dTop).toFixed(1)}" fill="${OIL_COL}" opacity=".85" clip-path="url(#ke)"/>`;
-      h += `<line x1="${cx - a}" x2="${cx + a}" y1="${cy + b - 0.95 * 2 * b}" y2="${cy + b - 0.95 * 2 * b}" stroke="${C.red}" stroke-dasharray="2 2"/><rect x="${cx - 8}" y="${cy - b - 8}" width="16" height="8" fill="#fff" stroke="${C.ink}"/>`;
-      h += `<text x="${cx}" y="${cy - b - 14}" font-size="6.8" letter-spacing=".8" text-anchor="middle" fill="${C.mute}">КАМАЗ 8 М³ · СЕЧЕНИЕ</text>`;
-      h += `<text x="${cx}" y="${cy + b + 16}" font-size="7.6" text-anchor="middle" font-weight="700" fill="${C.ink}">${f2(tr.vKam)} м³</text><text x="${cx}" y="${cy + b + 27}" font-size="6.8" text-anchor="middle" fill="${C.mute}">уровень ${Math.round(tr.kamDepth)} мм из ${2 * KTANK.b}</text>`;
-      h += `<text x="${cx}" y="${cy + b + 38}" font-size="6.4" text-anchor="middle" fill="${C.red}">- - - 95 %: предел налива</text>`;
+      h += `<path d="M${tx} ${ty} L${tx + tw / 2} ${ty - 10} L${tx + tw} ${ty}" fill="none" stroke="${C.ink}" stroke-width="1.2"/>`;
+      h += `<text x="${tx + tw / 2}" y="${ty + th + 13}" font-size="7.6" text-anchor="middle" font-weight="700" fill="${C.ink}">${f1(tr.vRes)} м³</text><text x="${tx + tw / 2}" y="${ty + th + 24}" font-size="6.6" text-anchor="middle" fill="${C.mute}">${f2(tr.resLevel / 1000)} м</text>`;
+      h += `<text x="${tx + tw / 2}" y="${ty - 14}" font-size="6.4" letter-spacing=".6" text-anchor="middle" fill="${C.mute}">РЕЗЕРВУАР</text>`;
+      h += `<defs>${VESSELS.map((_, k) => `<clipPath id="ve${k}"><ellipse cx="0" cy="0" rx="34" ry="19"/></clipPath>`).join('')}</defs>`;
+      VESSELS.forEach((ve, k) => {
+        const cx = 118 + (k % 2) * 80;
+        const cy = 40 + Math.floor(k / 2) * 78;
+        const a = 34;
+        const b = 19;
+        const dep = tr.depths[k] / (2 * ve.b);
+        const top = b - dep * 2 * b;
+        const on = k === tr.cur && tr.phase !== 'done';
+        h += `<g transform="translate(${cx} ${cy})"><ellipse rx="${a}" ry="${b}" fill="#fff" stroke="${on ? C.red : C.ink}" stroke-width="${on ? 1.8 : 1.1}"/><rect x="${-a}" y="${top.toFixed(1)}" width="${2 * a}" height="${(b - top).toFixed(1)}" fill="${OIL_COL}" opacity=".85" clip-path="url(#ve${k})"/>`;
+        const y95 = b - (PLAN.fill > 0 ? 0.95 * 2 * b : 0);
+        h += `<line x1="${-a}" x2="${a}" y1="${y95}" y2="${y95}" stroke="${C.red}" stroke-dasharray="2 2" stroke-width=".7"/>`;
+        h += `<text y="${-b - 6}" font-size="6.6" text-anchor="middle" font-weight="${on ? 700 : 500}" fill="${on ? C.red : C.mute}">${ve.name.toUpperCase()}</text>`;
+        h += `<text y="${b + 12}" font-size="7.4" text-anchor="middle" font-weight="700" fill="${C.ink}">${f2(tr.vols[k])} / ${ve.cap} м³</text></g>`;
+      });
+      h += `<text x="158" y="172" font-size="6.2" text-anchor="middle" fill="${C.red}">- - - 95 %: предел налива</text>`;
       lvSvg.innerHTML = h;
     }
-    // the run: litres against minutes
+    // the run: each tanker's volume against the clock, the hose changes between them shaded
     {
       const T = tr.T;
       const X = (sec) => 22 + (sec / T) * 196;
-      const Y = (m3) => 112 - (m3 / PLAN.kamCap) * 100;
+      const Y = (m3) => 112 - (m3 / 20) * 100;
       let h = '';
-      for (const m of [0, 4, 8]) h += `<text x="17" y="${Y(m) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${m}</text><line x1="${X(0)}" x2="${X(T)}" y1="${Y(m)}" y2="${Y(m)}" stroke="${C.line}" stroke-width=".6"/>`;
+      for (const m of [0, 10, 20]) h += `<text x="17" y="${Y(m) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${m}</text><line x1="${X(0)}" x2="${X(T)}" y1="${Y(m)}" y2="${Y(m)}" stroke="${C.line}" stroke-width=".6"/>`;
       h += `<text x="2" y="9" font-size="6.5" fill="${C.mute}">м³</text>`;
-      h += `<line x1="${X(0)}" x2="${X(T)}" y1="${Y(tr.vEnd)}" y2="${Y(tr.vEnd)}" stroke="${C.red}" stroke-dasharray="2 2" stroke-width=".8"/>`;
-      let d = '';
-      for (let i = 0; i <= 40; i++) {
-        const sec = (i / 40) * T;
-        d += `${i ? 'L' : 'M'}${X(sec).toFixed(1)} ${Y(siteState(sec).vKam).toFixed(1)}`;
-      }
-      h += `<path d="${d}" fill="none" stroke="${C.ink}" stroke-width="1.4"/>`;
+      for (let k = 1; k < VESSELS.length; k++) h += `<rect x="${X(tr.tEnd[k - 1]).toFixed(1)}" y="${Y(20)}" width="${(X(tr.tStart[k]) - X(tr.tEnd[k - 1])).toFixed(1)}" height="${Y(0) - Y(20)}" fill="#eceef1"/>`;
+      VESSELS.forEach((ve, k) => {
+        const t0 = tr.tStart[k];
+        const t1 = tr.tEnd[k];
+        let d = '';
+        for (let i = 0; i <= 16; i++) {
+          const sec = t0 + (i / 16) * (t1 - t0);
+          d += `${i ? 'L' : 'M'}${X(sec).toFixed(1)} ${Y(siteState(sec).vols[k]).toFixed(1)}`;
+        }
+        d += `L${X(T).toFixed(1)} ${Y(tr.ends[k]).toFixed(1)}`;
+        h += `<path d="${d}" fill="none" stroke="${VCOL[k]}" stroke-width="1.4"/>`;
+      });
       const now = Math.min(T, tr.t);
-      h += `<circle cx="${X(now).toFixed(1)}" cy="${Y(tr.vKam).toFixed(1)}" r="3.2" fill="${C.red}"/>`;
+      if (tr.cur >= 0) h += `<circle cx="${X(now).toFixed(1)}" cy="${Y(tr.vols[tr.cur]).toFixed(1)}" r="3.2" fill="${C.red}"/>`;
+      h += `<line x1="${X(now).toFixed(1)}" x2="${X(now).toFixed(1)}" y1="${Y(20)}" y2="${Y(0)}" stroke="${C.red}" stroke-width=".6"/>`;
       h += `<line x1="${X(0)}" x2="${X(T)}" y1="${Y(0)}" y2="${Y(0)}" stroke="${C.ink}" stroke-width=".8"/>`;
       for (const k of [0, 0.25, 0.5, 0.75, 1]) h += `<text x="${X(k * T)}" y="${Y(0) + 10}" font-size="6.5" text-anchor="middle" fill="${C.mute}">${mmss(k * T)}</text>`;
-      h += `<text x="${X(T)}" y="${Y(0) + 20}" font-size="6.2" letter-spacing="1" text-anchor="end" fill="${C.mute}">РЕАЛЬНОЕ ВРЕМЯ, МИН:С</text>`;
+      h += `<text x="${X(T)}" y="${Y(0) + 20}" font-size="6.2" letter-spacing="1" text-anchor="end" fill="${C.mute}">РЕАЛЬНОЕ ВРЕМЯ, Ч:МИН:С</text>`;
+      h += VESSELS.map((ve, k) => `<text x="${24 + k * 50}" y="7" font-size="6.2" fill="${VCOL[k]}" font-weight="700">${ve.id === 'kam' ? 'КАМАЗ' : `S${k}`}</text>`).join('');
       runSvg.innerHTML = h;
       runTag.innerHTML = `<b style="color:${C.ink}">${mmss(now)}</b> / ${mmss(T)}`;
-      runFoot.innerHTML = `Осталось <b style="color:${C.ink}">${mmss(tr.left)}</b> · налито <b style="color:${C.ink}">${Math.round(tr.vKam * 1000)}</b> л · <b style="color:${C.ink}">${f2(tr.mass)}</b> т`;
+      runFoot.innerHTML = `Осталось <b style="color:${C.ink}">${mmss(tr.left)}</b> · налито <b style="color:${C.ink}">${f1(tr.total)}</b> м³ · <b style="color:${C.ink}">${f1(tr.mass)}</b> т`;
     }
     const ov = [`${OIL.rho} кг/м³`, `${OIL.nu40} мм²/с (29–35)`, `≈ ${OIL.nu20} мм²/с`, `≤ ${OIL.pour} °С`, `≥ ${OIL.flash} °С`, `${f2(tr.mass)} т`, `${f1((tr.vRes * OIL.rho) / 1000)} т`];
     oilRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${ov[i]}</b>`));
     const regime = tr.re < 2300 ? 'ламинарный' : tr.re < 4000 ? 'переходный' : 'турбулентный';
-    const hv = [`${f1(tr.q)} м³/ч · ${f1((tr.q / 3.6))} л/с`, `${f2(tr.v)} м/с`, `Re ${Math.round(tr.re)} · ${regime}`, `+${f2(tr.hs)} м масла`, `${tr.pIn >= 0 ? '+' : ''}${Math.round(tr.pIn * 1000)} кПа / ${f2(tr.pOut)} МПа`, `${f2(tr.lossS)} / ${f2(tr.lossD)} м`];
+    const hv = [tr.phase === 'fill' ? cur.name : tr.phase === 'swap' ? `стоп · рукав → ${cur.name}` : 'всё налито', `${f1(tr.q)} м³/ч · ${f1(tr.q / 3.6)} л/с`, `${f2(tr.v)} м/с`, `Re ${Math.round(tr.re)} · ${regime}`, `${tr.pIn >= 0 ? '+' : ''}${Math.round(tr.pIn * 1000)} кПа / ${f2(tr.pOut)} МПа`, `${f2(tr.lossS)} / ${f2(tr.lossD)} м`];
     hydRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${hv[i]}</b>`));
     const end = siteState(tr.T);
-    const tv = [`${f2(tr.vEnd)} м³ · ${f2((tr.vEnd * OIL.rho) / 1000)} т`, `${mmss(tr.T)} (${f1(tr.T / 60)} мин)`, `${f1(tr.p1)} кВт`, `${f2(tr.energy)} / ${f2(end.energy)} кВт·ч`, `${f2(tr.fuel)} / ${f2(end.fuel)} л`, `${f1(end.vRes)} м³ · ${Math.round((end.vRes / PLAN.resCap) * 100)} %`, `${Math.floor(PLAN.res0 / tr.vEnd)} полных КАМАЗа`];
+    const tv = [
+      ...VESSELS.map((ve, k) => `${f2(tr.ends[k])} м³ · ${mmss(tr.tEnd[k] - tr.tStart[k])}${k === tr.cur && tr.phase === 'fill' ? ' ▲' : tr.vols[k] >= tr.ends[k] - 1e-3 ? ' ✓' : ''}`),
+      `${f1(tr.totalEnd)} м³ · ${mmss(tr.T)}`,
+      `${f1(end.energy)} кВт·ч · ${f1(end.fuel)} л`,
+      `${f1(end.vRes)} м³ · ${Math.round((end.vRes / PLAN.resCap) * 100)} %`,
+    ];
     totRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${tv[i]}</b>`));
-    trLine.innerHTML = `Налито <b style="color:${C.red}">${f2(tr.vKam)}</b> из ${f2(tr.vEnd)} м³ &nbsp;·&nbsp; осталось <b>${mmss(tr.left)}</b> &nbsp;·&nbsp; в резервуаре <b>${f1(tr.vRes)} м³</b>`;
+    trLine.innerHTML = `Налито <b style="color:${C.red}">${f1(tr.total)}</b> из ${f1(tr.totalEnd)} м³ &nbsp;·&nbsp; ${tr.phase === 'fill' ? `сейчас <b>${cur.name}</b> ${f1(tr.vols[tr.cur])} м³` : tr.phase === 'swap' ? `перестановка рукава на <b>${cur.name}</b>` : 'налив закончен'} &nbsp;·&nbsp; осталось <b>${mmss(tr.left)}</b> &nbsp;·&nbsp; в резервуаре <b>${f1(tr.vRes)} м³</b>`;
   };
   /** the piping's panels: what the suction line leaves of the pump's 5 m, the hose and the filter, the gauges */
   const drawPipes = (s) => {

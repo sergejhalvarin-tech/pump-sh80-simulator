@@ -9,7 +9,7 @@ import {efficiency, flow, G, gapU, P_MAX, power, RATED, RPM_MAX, torque, travelU
 import {EM, motorState} from './elec.js';
 import {powerState} from './supply.js';
 import {suctionBudget} from './pipes.js';
-import {PLAN} from './transfer.js';
+import {PLAN, VESSELS} from './transfer.js';
 import {CORE, MOTOR, Z} from './motor.js';
 import {VALVE_Y} from './pump.js';
 import {createPumpStage} from './stage.js';
@@ -111,7 +111,7 @@ export const VIEW_FN = {
   // the set on its trailer behind the pickup, from the side its section opens (−x: it is turned to face the truck)
   genset: (u) => ({tx: 0, ty: 0.09, tz: 3.45, az: -82 - 2.5 * u, el: 12 + 0.6 * u, d: 3.7, sx: -40, sy: 0}),
   // the pickup and its trailer side on, the way the brochure shows it
-  site: (u) => ({tx: 1.5, ty: 0.2, tz: -1.2, az: 28 + 2 * u, el: 24, d: 30, sx: -40, sy: 0}),
+  site: (u) => ({tx: -3.2, ty: 0.4, tz: 0.6, az: 6 + 2 * u, el: 30, d: 44, sx: -20, sy: 0}),
   truck: (u) => ({tx: 0, ty: -0.25, tz: 0.15, az: 92 - 1.5 * u, el: 6 + 0.8 * u, d: 15.5, sx: -40, sy: 0}),
   // the suction side close up: the counter flange, the gauge, the filter
   pipes: (u) => ({tx: 0.36, ty: 0.22, tz: 0, az: 38 + 3 * u, el: 20, d: 1.85, sx: -40, sy: 0}),
@@ -251,7 +251,8 @@ export function makeConsoleFrame(ui, st) {
       const Pm = (q) => P(q.x, q.y, q.z);
       callouts.push(
         {name: `Резервуар · ${fx(tr.vRes, 1)} м³ ${tr.running ? '▼' : ''}`, sub: `УРОВЕНЬ ${fx(tr.resLevel / 1000, 2)} М · БЫЛО ${fx(tr0.resLevel / 1000, 2)} М`, at: Pm(A.res), label: [1060, 150], w: 210, o: vis},
-        {name: `КАМАЗ · ${fx(tr.vKam, 2)} м³ ${tr.running ? '▲' : '✓'}`, sub: `${Math.round((tr.vKam / 8) * 100)} % ЦИСТЕРНЫ · ${fx((tr.vKam * 885) / 1000, 2)} Т`, at: Pm(A.kam), label: [430, 190], w: 190, o: vis},
+        {name: `КАМАЗ · ${fx(tr.vols[0], 2)} м³ ${tr.cur === 0 && tr.running ? '▲' : tr.vols[0] > 7.59 ? '✓' : ''}`, sub: `${Math.round((tr.vols[0] / 8) * 100)} % ЦИСТЕРНЫ 8 М³ · ${fx((tr.vols[0] * 885) / 1000, 2)} Т`, at: Pm(A.kam), label: [430, 190], w: 190, o: vis},
+        ...(tr.cur > 0 ? [{name: `${VESSELS[tr.cur].name} · ${fx(tr.vols[tr.cur], 1)} м³ ${tr.running ? '▲' : ''}`, sub: tr.running ? `${Math.round((tr.vols[tr.cur] / 20) * 100)} % ЦИСТЕРНЫ 20 М³ · ${fx((tr.vols[tr.cur] * 885) / 1000, 1)} Т` : 'ПЕРЕСТАНОВКА РУКАВА', at: Pm(A.sc[tr.cur - 1]), label: [640, 130], w: 200, o: vis}] : []),
         {name: 'Рукав всасывания', sub: 'ОТ ПАТРУБКА РЕЗЕРВУАРА К ФИЛЬТРУ', at: Pm(A.hoseS), label: [905, 640], w: 190, o: vis},
         {name: 'Рукав нагнетания', sub: 'ОТ НАСОСА В ЛЮК ЦИСТЕРНЫ', at: Pm(A.hoseD), label: [430, 640], w: 170, o: vis},
       );
