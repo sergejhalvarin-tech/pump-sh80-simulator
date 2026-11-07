@@ -7,6 +7,7 @@ import {B, HEAT, LOADS, POST, POWER, SEC, SITE, solveTruss, WATER} from './calc.
 import {buildHangar, ROOMS, ZONES} from './building.js';
 import {EQ, EQUIP, OILQ} from './equip_calc.js';
 import {buildEquipment} from './equipment.js';
+import {AUPT, buildPiping, LINES} from './piping.js';
 
 const f = (x, n = 1) => (Math.round(x * 10 ** n) / 10 ** n).toFixed(n).replace('.', ',');
 document.title = 'Ангар 504 м² · производство масел';
@@ -40,6 +41,11 @@ scene.add(H.root);
 H.layers.equip = new THREE.Group();
 H.root.add(H.layers.equip);
 const EQB = buildEquipment(H.layers.equip);
+for (const k of ['pipes', 'aupt']) {
+  H.layers[k] = new THREE.Group();
+  H.root.add(H.layers[k]);
+}
+buildPiping(H.layers.pipes, H.layers.aupt);
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -55,10 +61,12 @@ const LAYERS = [
   ['water', 'Вода и стоки'],
   ['fire', 'Пожарная безопасность'],
   ['equip', 'Оборудование'],
+  ['pipes', 'Трубопроводы'],
+  ['aupt', 'Пожаротушение'],
   ['zones', 'Зоны и подписи'],
   ['util', 'Расчёт ферм'],
 ];
-const on = {frame: true, clad: true, vent: false, heat: false, elec: false, water: false, fire: false, equip: true, zones: true, util: false};
+const on = {frame: true, clad: true, vent: false, heat: false, elec: false, water: false, fire: false, equip: true, pipes: true, aupt: false, zones: true, util: false};
 let cladMode = 'solid'; // solid · glass
 const applyLayers = () => {
   for (const [k] of LAYERS) if (H.layers[k]) H.layers[k].visible = on[k];
@@ -126,6 +134,28 @@ const trussSvg = () => {
 
 const ZN = {raw: 'Приёмка', mix: 'Смешение', fill: 'Фасовка', store: 'Склад ГП', ship: 'Отгрузка', aisle: 'Проезд', tech: 'Техпом.', lab: 'ОТК'};
 const TABS = {
+  pipe: ['Трубы', () => `
+    ${table(['Линия', 'DN', 'м³/ч', 'v, м/с', 'L, м'], LINES.map((l) => [`${l.name}<br><span style="color:#6b7075">${l.f === 'air' ? 'сжатый воздух 8 бар' : 'масло'}</span>`, l.dn, f(l.q, l.q < 2 ? 1 : 0), f(l.v, 2), f(l.L, 0)]))}
+    ${row('Масляные линии всего', `${f(LINES.filter((l) => l.f === 'oil').reduce((s, l) => s + l.L, 0), 0)} м`)}
+    ${row('Воздух', `${f(LINES.filter((l) => l.f === 'air').reduce((s, l) => s + l.L, 0), 0)} м`)}
+    ${row('Материал', 'сталь 20, ГОСТ 8732/10704; фланцы и арматура PN16')}
+    ${row('Окраска (ГОСТ 14202)', 'масла — коричневый, жёлтые предупредительные кольца; воздух — синий')}
+    ${row('Задвижки', `${LINES.length * 2 + LINES.filter((l) => l.branch).length} шт. с ручным приводом`)}
+    <p class="note">Один перекачивающий насос через переключение задвижек и загружает реакторы из резервуаров, и откачивает готовое масло через фильтр в расходную ёмкость. Всасывающая линия приёма — DN100 (0,8–1,3 м/с), напорные — 1–2,5 м/с. Трубы заземлены и соединены перемычками — защита от статического электричества.</p>`],
+  aupt: ['Тушение', () => `
+    ${row('Тип', 'модульное порошковое (класс пожара B — масла)')}
+    ${row('Защищаемая площадь цеха', `${AUPT.hall} м²`)}
+    ${row('Модуль на высоте 5,5 м: площадь', `${AUPT.cover} м² (по паспорту выбранной модели)`)}
+    ${row('Модулей: нужно / поставлено', `${AUPT.need} / ${AUPT.modules.length - 1} в цехе + 1 в техпомещении`)}
+    ${row('Порошок', `${AUPT.modules.length} × ${AUPT.kg} кг = ${AUPT.powder} кг`)}
+    ${row('Пуск', `автоматически от двух извещателей, задержка ${AUPT.delay} с на эвакуацию; ручной — кнопки у выходов`)}
+    ${row('Табло', '«Порошок — уходи!» внутри, «Порошок — не входи!» и «Автоматика отключена» снаружи')}
+    ${row('Управление', 'ППКУП у северной двери, связь с СОУЭ и отключением вентиляции')}
+    <h4>Альтернатива: пенный спринклер</h4>
+    ${row('Интенсивность × площадь', `≈ ${f(AUPT.foam.i, 2)} л/(с·м²) × ${AUPT.foam.area} м² = ${f(AUPT.foam.flow, 0)} л/с`)}
+    ${row('Время', `${AUPT.foam.min} мин + ВПВ 2,5 л/с на 1 ч`)}
+    ${row('Запас воды', `≈ ${f(AUPT.foam.water, 0)} м³ + насосная, пенообразователь 6 %`)}
+    <p class="note">Для удалённой площадки без водопровода модульное порошковое тушение проще и дешевле: нет резервуара, насосной и сети. Пенный спринклер оправдан при сети или пожарном резервуаре. Окончательный выбор и нормативные параметры — в проекте по СП 485.1311500 / 486.1311500.</p>`],
   eq: ['Оборудование', () => `
     ${table(['Оборудование', 'Шт.', 'кВт'], EQUIP.map((e) => [`<b>${e.name}</b><br><span style="color:#6b7075">${ZN[e.zone]} · ${e.spec}</span>`, e.n, e.kw ? f(e.n * e.kw, 1) : '—']))}
     ${row('Технологическая мощность', `${f(EQ.kw, 0)} кВт`)}
@@ -263,7 +293,7 @@ const tab = (k) => {
   body.innerHTML = TABS[k][1]();
   for (const b of ui.querySelectorAll('[data-t]')) b.classList.toggle('on', b.dataset.t === k);
   // a tab brings its own layer up, and the panels go see-through so the system shows
-  const lay = {vent: 'vent', heat: 'heat', elec: 'elec', water: 'water', fire: 'fire', str: 'util'}[k];
+  const lay = {vent: 'vent', heat: 'heat', elec: 'elec', water: 'water', fire: 'fire', str: 'util', pipe: 'pipes', aupt: 'aupt'}[k];
   if (lay) {
     on[lay] = true;
     cladMode = 'glass';
