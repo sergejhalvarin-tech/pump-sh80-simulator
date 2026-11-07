@@ -10,6 +10,7 @@
 |---|---|
 | [Симулятор](https://sergejhalvarin-tech.github.io/pump-sh80-simulator/) | насос, двигатель, питание, ДГУ, пикап, обвязка, площадка налива; на телефоне — вертикальный режим |
 | [CAD и прочность](https://sergejhalvarin-tech.github.io/pump-sh80-simulator/strength.html) | насос по габаритному чертежу, вал и корпус в цвете напряжений (CalculiX) |
+| [Ангар 18 × 28 м](https://sergejhalvarin-tech.github.io/pump-sh80-simulator/hangar.html) | цех производства и фасовки масел: каркас ЛСТК с расчётом ферм, сэндвич-панели, вентиляция, отопление, электрика, вода, пожарная безопасность, зоны под оборудование |
 | [Отчёт PDF](https://sergejhalvarin-tech.github.io/pump-sh80-simulator/report.pdf) | состав, расчёт налива при +20…−10 °С, прочность, безопасность |
 | [Офлайн-версия](https://sergejhalvarin-tech.github.io/pump-sh80-simulator/offline.html) | всё в одном файле (≈ 19 МБ), открывается без интернета |
 

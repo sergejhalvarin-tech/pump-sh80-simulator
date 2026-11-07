@@ -14,7 +14,7 @@ const copy = (from, to = path.basename(from)) => {
   console.log(`${to}  ${(fs.statSync(from).size / 1048576).toFixed(1)} MB`);
 };
 // each page with the models it fetches beside it
-for (const [page, as] of [['pump-site', 'index.html'], ['strength', 'strength.html']]) {
+for (const [page, as] of [['pump-site', 'index.html'], ['strength', 'strength.html'], ['hangar', 'hangar.html']]) {
   if (!fs.existsSync(path.join(DIST, `${page}.html`))) continue;
   copy(path.join(DIST, `${page}.html`), as);
   const list = path.join(DIST, `${page}.assets.json`);

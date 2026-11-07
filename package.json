@@ -13,7 +13,7 @@
     "three": "^0.186.1"
   },
   "scripts": {
-    "build": "node tools/teardown/sims/build.mjs ./sims/pump-site ./sims/pump-live ./sims/strength",
+    "build": "node tools/teardown/sims/build.mjs ./sims/pump-site ./sims/pump-live ./sims/strength ./sims/hangar",
     "build:site": "node tools/teardown/sims/build.mjs ./sims/pump-site"
   }
 }

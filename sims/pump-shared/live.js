@@ -92,7 +92,7 @@ export function runLive() {
   const phBot = document.createElement('div');
   phBot.className = 'ph ph-bot';
   const LBL = {hero: 'Общий', front: 'Торец', ports: 'Порты', valve: 'Клапан', rotors: 'Роторы', unit: 'Агрегат', motor: 'Мотор', power: 'Питание', genset: 'ДГУ', truck: 'Пикап', pipes: 'Трубы', site: 'Площадка', solid: 'Корпус', glass: 'Стекло', section: 'Сечение'};
-  phBot.innerHTML = `<div class="ph-row">${CAMS.map((k) => `<button data-v="${k}">${LBL[k]}</button>`).join('')}</div><div class="ph-row"><button data-p="1" class="red"></button>${CUTS.map((k) => `<button data-c="${k}">${LBL[k]}</button>`).join('')}<button data-t="1">Заново</button><button data-l="strength.html">CAD и прочность ↗</button><button data-l="report.pdf">Отчёт PDF ↗</button></div>`;
+  phBot.innerHTML = `<div class="ph-row">${CAMS.map((k) => `<button data-v="${k}">${LBL[k]}</button>`).join('')}</div><div class="ph-row"><button data-p="1" class="red"></button>${CUTS.map((k) => `<button data-c="${k}">${LBL[k]}</button>`).join('')}<button data-t="1">Заново</button><button data-l="hangar.html">Ангар ↗</button><button data-l="strength.html">CAD и прочность ↗</button><button data-l="report.pdf">Отчёт PDF ↗</button></div>`;
   document.body.append(phTop, phBot);
   const phEl = {
     title: phTop.querySelector('.ph-title'),
@@ -107,7 +107,7 @@ export function runLive() {
   // the pump in CAD with its strength, and the report: pages beside this one on the site
   const links = document.createElement('div');
   links.className = 'links';
-  links.innerHTML = '<a href="strength.html" target="_blank">CAD · ПРОЧНОСТЬ ↗</a><a href="report.pdf" target="_blank">ОТЧЁТ PDF ↗</a>';
+  links.innerHTML = '<a href="hangar.html" target="_blank">АНГАР ↗</a><a href="strength.html" target="_blank">ПРОЧНОСТЬ ↗</a><a href="report.pdf" target="_blank">ОТЧЁТ ↗</a>';
   links.addEventListener('pointerdown', (e) => e.stopPropagation());
   app.appendChild(links);
   const tourCursor = makeCursor(ui);
