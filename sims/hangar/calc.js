@@ -8,6 +8,8 @@
 // flammable ones) — fire hazard category В (В1–В3 by the fire load, settled once the equipment is placed, СП 12.13130),
 // so no explosion protection; mineral-wool (non-combustible) sandwich panels.
 
+import {EQ} from './equip_calc.js';
+
 export const SITE = {name: 'Новосибирск (Урал/Сибирь)', tOut: -37, tHeat: -8.1, zHeat: 221, Sg: 2.0, snowDistrict: 'IV', w0: 0.38, windDistrict: 'III'};
 
 // the building: 18 m span × 28 m long = 504 m², walls 6 m to the eaves, a 15° gable roof; LSTK trusses and posts every
@@ -211,7 +213,7 @@ export const HEAT = (() => {
   return {gsop, Rreq, env, rows, trans, L, Lgen, Lloc, eta, tAfterRec, ventKw, ventNoRec, curtains, dt, roofArea, wallNet, openings};
 })();
 
-// ------------------------------------------------------------ power, water
+// ------------------------------------------------------------ power, water (the process load from the equipment placed)
 export const POWER = (() => {
   const rows = [
     ['Освещение LED, 300 лк (≈ 7 Вт/м²)', 3.6, 1.0],
@@ -220,7 +222,7 @@ export const POWER = (() => {
     ['Местные отсосы, крышные вентиляторы', 3 * 0.75, 1.0],
     ['Воздушно-тепловые завесы ворот', HEAT.curtains, 0.5],
     ['Отопление: электрические воздушно-отопительные агрегаты', Math.ceil(HEAT.trans / 5) * 5, 0.8],
-    ['Технологическое оборудование (резерв: смесители с подогревом, насосы, линия розлива, компрессор)', 80, 0.7],
+    ['Технологическое оборудование (по расстановке: смесители, резервуары, насосы, линия розлива, компрессор)', Math.round(EQ.kw), 0.7],
     ['Розетки, АБК, лаборатория', 10, 0.5],
   ].map(([name, kw, kc]) => ({name, kw, kc, calc: kw * kc}));
   const installed = rows.reduce((s, r) => s + r.kw, 0);

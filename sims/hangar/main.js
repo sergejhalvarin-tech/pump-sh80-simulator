@@ -5,6 +5,8 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {B, HEAT, LOADS, POST, POWER, SEC, SITE, solveTruss, WATER} from './calc.js';
 import {buildHangar, ROOMS, ZONES} from './building.js';
+import {EQ, EQUIP, OILQ} from './equip_calc.js';
+import {buildEquipment} from './equipment.js';
 
 const f = (x, n = 1) => (Math.round(x * 10 ** n) / 10 ** n).toFixed(n).replace('.', ',');
 document.title = 'Ангар 504 м² · производство масел';
@@ -35,6 +37,9 @@ scene.add(ground);
 
 const H = buildHangar();
 scene.add(H.root);
+H.layers.equip = new THREE.Group();
+H.root.add(H.layers.equip);
+const EQB = buildEquipment(H.layers.equip);
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -49,10 +54,11 @@ const LAYERS = [
   ['elec', 'Электрика'],
   ['water', 'Вода и стоки'],
   ['fire', 'Пожарная безопасность'],
-  ['zones', 'Зоны под оборудование'],
+  ['equip', 'Оборудование'],
+  ['zones', 'Зоны и подписи'],
   ['util', 'Расчёт ферм'],
 ];
-const on = {frame: true, clad: true, vent: false, heat: false, elec: false, water: false, fire: false, zones: true, util: false};
+const on = {frame: true, clad: true, vent: false, heat: false, elec: false, water: false, fire: false, equip: true, zones: true, util: false};
 let cladMode = 'solid'; // solid · glass
 const applyLayers = () => {
   for (const [k] of LAYERS) if (H.layers[k]) H.layers[k].visible = on[k];
@@ -72,7 +78,7 @@ const applyLayers = () => {
 // ------------------------------------------------------------ the camera presets
 const VIEWS = {
   out: {name: 'Снаружи', pos: [-22, 17, 30], tgt: [14, 3, 0]},
-  in: {name: 'Внутри', pos: [2.5, 2.2, 7.5], tgt: [18, 3, -3]},
+  in: {name: 'Внутри', pos: [21.2, 3.4, -1.4], tgt: [6, 1.4, -1.8]},
   plan: {name: 'План', pos: [14, 52, 0.01], tgt: [14, 0, 0]},
   gable: {name: 'Торец A', pos: [-24, 5, 0], tgt: [14, 4, 0]},
   rooms: {name: 'Помещения', pos: [15.5, 4.2, 7.5], tgt: [25, 1.4, -1.5]},
@@ -118,7 +124,21 @@ const trussSvg = () => {
   return h;
 };
 
+const ZN = {raw: 'Приёмка', mix: 'Смешение', fill: 'Фасовка', store: 'Склад ГП', ship: 'Отгрузка', aisle: 'Проезд', tech: 'Техпом.', lab: 'ОТК'};
 const TABS = {
+  eq: ['Оборудование', () => `
+    ${table(['Оборудование', 'Шт.', 'кВт'], EQUIP.map((e) => [`<b>${e.name}</b><br><span style="color:#6b7075">${ZN[e.zone]} · ${e.spec}</span>`, e.n, e.kw ? f(e.n * e.kw, 1) : '—']))}
+    ${row('Технологическая мощность', `${f(EQ.kw, 0)} кВт`)}
+    <h4>Производительность за смену 8 ч</h4>
+    ${row('Смешение: 2 реактора × партия', `${f(EQ.mixBatch)} м³ за ${f(EQ.mixCycle)} ч → ${f(EQ.mixShift, 0)} м³`)}
+    ${row('Фасовка: 60 % канистры, 40 % бочки/IBC', `${f(EQ.fillShift, 0)} м³`)}
+    ${row('Выпуск (по узкому месту — смешению)', `${f(EQ.shift, 0)} м³ ≈ ${f(EQ.shift * OILQ.rho, 0)} т`)}
+    ${row('В месяц (22 смены)', `${f(EQ.month, 0)} м³ ≈ ${f(EQ.month * OILQ.rho, 0)} т`)}
+    <h4>Обвалование резервуаров</h4>
+    ${row('Объём наибольшего резервуара + 10 %', '13,2 м³')}
+    ${row('Свободная площадь внутри борта', `${f(EQ.bundArea)} м²`)}
+    ${row('Высота борта: расчёт / принято', `${f(EQ.bundH, 2)} / ${f(EQB.kerb, 2)} м`)}
+    <p class="note">Типовое оборудование своего класса, без привязки к производителю. Узкое место — смесители: третий реактор или нагрев быстрее поднимет выпуск до ≈ 27 м³ за смену, фасовка это пропустит.</p>`],
   bld: ['Здание', () => `
     ${row('Габариты в осях', `${B.span} × ${B.length} м`)}
     ${row('Площадь пола', `${B.area} м²`)}
@@ -193,13 +213,14 @@ const TABS = {
     ${row('Проливы масла', 'обвалование резервуаров, сбор в приямок')}
     <p class="note">Масло в канализацию не сбрасывается: лотки собирают проливы и воду от мойки в маслоуловитель, отделённое масло — на утилизацию.</p>`],
   fire: ['Пожарная', () => `
-    ${row('Категория помещения', 'В1–В3 (ГЖ, вспышка ≥ 180 °С)')}
+    ${table(['Зона', 'Масло, т', 'q, МДж/м²', 'Кат.'], Object.entries(EQ.load).map(([k, v]) => [ZN[k], f(v.t), Math.round(v.q).toLocaleString('ru'), EQ.cat(v.q)]))}
+    ${row('Категория помещения по расстановке', 'В1 (q > 2200 МДж/м²)')}
     ${row('Панели', 'минвата — НГ, класс К0')}
     ${row('Пожарная сигнализация', '15 дымовых извещателей, ручные у выходов')}
     ${row('Оповещение', 'СОУЭ 2-го типа, табло «Выход»')}
     ${row('Огнетушители', '6 × ОП-8 + 3 пожарных крана')}
     ${row('Эвакуация', '4 двери + 2 ворот, путь ≤ 60 м')}
-    ${row('АУПТ', 'по СП 486.1311500 — определяется по категории после расстановки оборудования')}
+    ${row('АУПТ', 'для В1 с хранением масел — нужна; пенная или порошковая модульная над резервуарами, смесителями и стеллажами (тип — в проекте по СП 486.1311500)')}
     <p class="note">Зона резервуаров базовых масел — с обвалованием на объём наибольшей ёмкости.</p>`],
 };
 
@@ -273,7 +294,7 @@ addEventListener('resize', fit);
 fit();
 const q = new URLSearchParams(location.search);
 view(q.get('v') || 'out');
-tab(q.get('t') || 'bld');
+tab(q.get('t') || 'eq');
 if (q.get('l')) for (const k of q.get('l').split(',')) on[k] = true;
 if (q.get('g')) cladMode = 'glass';
 applyLayers();

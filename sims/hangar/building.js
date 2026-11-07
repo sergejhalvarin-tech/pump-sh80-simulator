@@ -375,7 +375,7 @@ export function buildHangar() {
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: t, transparent: true}));
-    sp.scale.set(4.6, 0.9, 1);
+    sp.scale.set(3.2, 0.62, 1);
     sp.renderOrder = 10;
     return sp;
   };
@@ -388,10 +388,10 @@ export function buildHangar() {
     const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(x1 - x0, 0.001, z1 - z0)), new THREE.LineBasicMaterial({color: zn.col}));
     edge.position.set((x0 + x1) / 2, 0.03, (z0 + z1) / 2);
     layer('zones').add(edge);
-    if (zn.bund) for (const [a, b] of [[V(x0, 0.1, z0), V(x1, 0.1, z0)], [V(x0, 0.1, z1), V(x1, 0.1, z1)], [V(x0, 0.1, z0), V(x0, 0.1, z1)], [V(x1, 0.1, z0), V(x1, 0.1, z1)]]) mesh('zones', bar(a, b, 0.15, 0.2), M.concrete);
     const area = ((x1 - x0) * (z1 - z0)).toFixed(0);
     const sp = label(zn.name.split(':')[0], `${area} м² · ${zn.name.includes(':') ? zn.name.split(':')[1].trim() : zn.name}`.slice(0, 48), zn.col);
-    sp.position.set((x0 + x1) / 2, 1.4, (z0 + z1) / 2);
+    // over the equipment, except the aisle's, which lies low so it does not block the view along it
+    sp.position.set((x0 + x1) / 2, zn.key === 'aisle' ? 0.35 : 5.2, (z0 + z1) / 2);
     layer('zones').add(sp);
   }
   for (const r of ROOMS) {
