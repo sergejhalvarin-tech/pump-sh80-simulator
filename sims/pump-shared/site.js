@@ -17,7 +17,7 @@ import RES_B64 from './assets/reservoir.glb';
 import KAMAZ_B64 from './assets/kamaz.glb';
 import SCANIA_B64 from './assets/scania.glb';
 import {HOSE} from './pipes.js';
-import {KTANK, planTransfer, SCANIA, VESSELS, vesselDepth, Y} from './transfer.js';
+import {CFG, KTANK, planTransfer, SCANIA, VESSELS, vesselDepth, Y} from './transfer.js';
 import {GROUND} from './truck.js';
 
 export const RES = {k: Math.cbrt(80 / 3000) * 1000, x: 9800, z: -1600, rShell: 9.58, floor: 0.45, volume: 80};
@@ -28,10 +28,12 @@ const NOZZLE = new THREE.Vector3(5448, GROUND + 150, -1600);
 const HATCH = new THREE.Vector3(KTANK.x, Y.hatch, 600);
 export const OIL_COL = '#c9952b';
 
-const decode = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+// a model is either inlined (base64) or, in the site build, a file next to the page ("url:name.glb") fetched once the
+// page is up, so the pump shows at once and the trucks and the tank arrive after
+export const fetchModel = async (src) => (src.startsWith('url:') ? (await fetch(src.slice(4))).arrayBuffer() : Uint8Array.from(atob(src), (c) => c.charCodeAt(0)).buffer);
 const parse = (b64) => {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  return new Promise((ok, no) => loader.parse(decode(b64), '', ok, no)).then((g) => g.scene);
+  return fetchModel(b64).then((buf) => new Promise((ok, no) => loader.parse(buf, '', ok, no))).then((g) => g.scene);
 };
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -176,6 +178,100 @@ export function paintReservoir(res) {
   res.add(decal);
 }
 
+// A 20 m³ semitrailer tank in the pump's frame, its axis along z at x = 0, its rear head SCANIA.z0 ahead of the
+// trailer's rear face (at SCANIA.zRear, the front toward −z): an elliptic barrel 2.5 × 1.6 m with dished heads, painted
+// orange with the hazard plates and the yellow stripe, two filling hatches, the walkway with its folding rails, the
+// rear ladder, the saddles down to the frame.
+function buildScaniaTank() {
+  const g = new THREE.Group();
+  const {a, b, len} = SCANIA;
+  const zr = SCANIA.zRear - SCANIA.z0; // rear head's seam
+  const zf = zr - len; // front head's seam
+  const yc = SCANIA.yc;
+  // the paint with its markings, wrapped round the barrel (u round, v along)
+  const cv = document.createElement('canvas');
+  cv.width = 2048;
+  cv.height = 1024;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#e8601f';
+  c.fillRect(0, 0, 2048, 1024);
+  const side = (u, flip) => {
+    c.save();
+    c.translate(u * 2048, 512);
+    c.rotate(flip ? Math.PI / 2 : -Math.PI / 2);
+    c.fillStyle = '#f6c21a';
+    for (let x = -460; x < 460; x += 60) c.fillRect(x, 150, 34, 16);
+    c.fillStyle = '#ffffff';
+    c.font = '700 92px Arial, sans-serif';
+    c.textAlign = 'center';
+    c.fillText('ОГНЕОПАСНО', 140, 20);
+    c.fillStyle = '#d7262b';
+    c.beginPath();
+    c.moveTo(-330, -60);
+    c.lineTo(-250, 20);
+    c.lineTo(-330, 100);
+    c.lineTo(-410, 20);
+    c.closePath();
+    c.fill();
+    c.fillStyle = '#fff';
+    c.font = '700 44px Arial';
+    c.fillText('3', -330, 40);
+    c.fillStyle = '#f2f2f2';
+    c.fillRect(-470, 60, 0, 0);
+    c.font = '700 46px Arial';
+    c.fillText('И-20А · 20 м³', 140, 90);
+    c.restore();
+  };
+  side(0.25, false);
+  side(0.75, true);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const paint = new THREE.MeshPhysicalMaterial({map: tex, roughness: 0.42, metalness: 0.15, clearcoat: 0.7, clearcoatRoughness: 0.2, side: THREE.DoubleSide});
+  const orange = new THREE.MeshPhysicalMaterial({color: '#e8601f', roughness: 0.42, metalness: 0.15, clearcoat: 0.7, side: THREE.DoubleSide});
+  const steel = new THREE.MeshStandardMaterial({color: '#b9bec4', roughness: 0.35, metalness: 0.85});
+  const dark = new THREE.MeshStandardMaterial({color: '#25272a', roughness: 0.6, metalness: 0.4});
+  const add = (geo, m) => {
+    const o = new THREE.Mesh(geo, m);
+    o.castShadow = true;
+    o.receiveShadow = true;
+    g.add(o);
+    return o;
+  };
+  // the barrel: a unit cylinder along z scaled to the ellipse
+  const barrel = add(new THREE.CylinderGeometry(1, 1, len, 72, 1, true).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), paint);
+  barrel.scale.set(a, b, 1);
+  barrel.position.set(0, yc, (zr + zf) / 2);
+  // dished heads: half ellipsoids 420 mm deep
+  for (const [z, s] of [[zr, 1], [zf, -1]]) {
+    const h = add(new THREE.SphereGeometry(1, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2).rotateX((s * Math.PI) / 2), orange);
+    h.scale.set(a, b, 420);
+    h.position.set(0, yc, z);
+  }
+  const top = yc + b;
+  // two hatches with their dark lids, the forward one a little smaller
+  for (const [dz, r] of [[SCANIA.hatchZ - SCANIA.z0, 290], [len - 1300, 250]]) {
+    const z = zr - dz;
+    add(new THREE.CylinderGeometry(r, r, 160, 40).translate(0, top + 60, z), orange);
+    add(new THREE.CylinderGeometry(r - 30, r - 30, 40, 40).translate(0, top + 160, z), dark);
+    add(new THREE.BoxGeometry(70, 50, 120).translate(0, top + 200, z), dark);
+  }
+  // the walkway and its rails, posts every 1.2 m
+  add(new THREE.BoxGeometry(560, 24, len - 600).translate(0, top + 30, (zr + zf) / 2), steel);
+  for (const s of [-1, 1]) {
+    const rail = new THREE.CatmullRomCurve3([v(s * 520, top + 520, zr - 250), v(s * 520, top + 520, zf + 250)]);
+    add(new THREE.TubeGeometry(rail, 8, 18, 8), steel);
+    for (let z = zr - 250; z >= zf + 250; z -= 1200) add(new THREE.CylinderGeometry(14, 14, 520, 8).translate(s * 520, top + 260, z), steel);
+  }
+  // the rear ladder from the frame up to the walkway
+  const lz = zr + 470;
+  for (const s of [-1, 1]) add(new THREE.CylinderGeometry(16, 16, top - GROUND - 500, 8).translate(s * 220, (top + GROUND + 500) / 2, lz), steel);
+  for (let y = GROUND + 650; y < top; y += 300) add(new THREE.CylinderGeometry(12, 12, 440, 8).rotateZ(Math.PI / 2).translate(0, y, lz), steel);
+  // saddles down to the frame
+  for (const z of [zr - 500, (zr + zf) / 2, zf + 500]) add(new THREE.BoxGeometry(1900, 140, 260).translate(0, GROUND + SCANIA.floor + 40, z), dark);
+  return g;
+}
+
 export function buildSite() {
   const root = new THREE.Group();
   const mat = {
@@ -203,15 +299,14 @@ export function buildSite() {
   // (each turned to face −z like the KAMAZ, its trailer's rear face at SCANIA.zRear)
   const tanks = VESSELS.map((ve, k) => {
     if (!k) return {...ve, x: KTANK.x, yc: KTANK.yc, z0: KTANK.zc - KTANK.len / 2, vis: KTANK.len, hatch: HATCH};
-    const zt = SCANIA.zRear - SCANIA.tank[1];
-    return {...ve, yc: SCANIA.yc, z0: zt, vis: SCANIA.tank[1] - SCANIA.tank[0], hatch: v(ve.x, SCANIA.hatchY, SCANIA.zRear - SCANIA.hatchZ)};
+    return {...ve, yc: SCANIA.yc, z0: SCANIA.zRear - SCANIA.z0 - SCANIA.len, vis: SCANIA.len, hatch: v(ve.x, SCANIA.hatchY, SCANIA.zRear - SCANIA.hatchZ)};
   });
   // one discharge hose, moved from truck to truck: to the KAMAZ up its near side; to a Scania round behind the trucks
   // along the road, up the gap on its near side, over the walkway into the hatch
   const disCurves = tanks.map(({x, hatch}, k) => {
     if (!k) return new THREE.CatmullRomCurve3([...pumpEnd, v(-2500, GROUND + 55, 200), v(-4150, GROUND + 60, 560), v(-4250, GROUND + 900, 600), v(-4330, 1500, 600), v(-4600, 2080, 600), v(-5150, 2120, 600), v(HATCH.x, 1980, HATCH.z), v(HATCH.x, Y.hatch - 120, HATCH.z)]);
     const gx = x + 1800;
-    return new THREE.CatmullRomCurve3([...pumpEnd, v(-2400, GROUND + 55, 2600), v(-4000, GROUND + 55, 5000), v(gx + 600, GROUND + 55, 5300), v(gx, GROUND + 55, 4400), v(gx, GROUND + 55, 1500), v(gx, GROUND + 600, 800), v(gx - 120, GROUND + 1900, 650), v(gx - 400, GROUND + 2800, 620), v(x + 900, GROUND + 3000, 600), v(x + 250, GROUND + 2950, hatch.z), v(x, hatch.y - 120, hatch.z)]);
+    return new THREE.CatmullRomCurve3([...pumpEnd, v(-2400, GROUND + 55, 2600), v(-4000, GROUND + 55, 5000), v(gx + 600, GROUND + 55, 5300), v(gx, GROUND + 55, 4400), v(gx, GROUND + 55, 1500), v(gx, GROUND + 600, 800), v(gx - 120, GROUND + 1900, 650), v(gx - 400, GROUND + 3000, 620), v(x + 1000, hatch.y + 420, 600), v(x + 250, hatch.y + 380, hatch.z), v(x, hatch.y - 120, hatch.z)]);
   });
   const sucHose = add(root, new THREE.TubeGeometry(sucCurve, 260, HOSE.od / 2, 14, false), mat.hose);
   const disHoses = disCurves.map((c) => add(root, new THREE.TubeGeometry(c, 360, HOSE.od / 2, 14, false), mat.hose));
@@ -219,6 +314,84 @@ export function buildSite() {
   // the tank's end: a tail and a clamp on the nozzle
   add(root, new THREE.CylinderGeometry(39, 39, 130, 24).rotateZ(Math.PI / 2).translate(NOZZLE.x - 20, NOZZLE.y, NOZZLE.z), mat.steel);
   add(root, new THREE.TorusGeometry(51, 5, 8, 32).rotateY(Math.PI / 2).translate(NOZZLE.x - 60, NOZZLE.y, NOZZLE.z), mat.steel);
+
+  // ------------------------------------------------------------ safety on the site
+  // Every tanker, the pickup and the storage tank earthed before a hatch opens (static from the flowing oil): a
+  // green-yellow lead from the frame to a copper rod driven into the ground. Two ОП-5 extinguishers by the pump, a
+  // drip tray under the unit in the bed, the emergency stop on its post by the pickup, the hazard sign on the path.
+  const stripes = (() => {
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 8;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#2f9e44';
+    c.fillRect(0, 0, 64, 8);
+    c.fillStyle = '#f2c518';
+    c.fillRect(0, 0, 32, 8);
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  mat.copper = new THREE.MeshStandardMaterial({color: '#b87333', roughness: 0.35, metalness: 0.9});
+  mat.red = new THREE.MeshPhysicalMaterial({color: '#c8161d', roughness: 0.3, metalness: 0.1, clearcoat: 1});
+  mat.black = new THREE.MeshStandardMaterial({color: '#1c1d1f', roughness: 0.7});
+  mat.yellow = new THREE.MeshStandardMaterial({color: '#f2c518', roughness: 0.5});
+  mat.tray = new THREE.MeshStandardMaterial({color: '#3c4148', roughness: 0.6, metalness: 0.5});
+  const earth = (rod, to) => {
+    add(root, new THREE.CylinderGeometry(9, 9, 420, 10).translate(rod.x, GROUND + 160, rod.z), mat.copper);
+    add(root, new THREE.CylinderGeometry(22, 22, 40, 12).translate(rod.x, GROUND + 330, rod.z), mat.copper);
+    const mid = rod.clone().lerp(to, 0.5);
+    mid.y = GROUND + 40;
+    const curve = new THREE.CatmullRomCurve3([v(rod.x, GROUND + 340, rod.z), v(rod.x + (mid.x - rod.x) * 0.3, GROUND + 30, rod.z + (mid.z - rod.z) * 0.3), mid, v(to.x, to.y - 300, to.z), to]);
+    const m = new THREE.MeshStandardMaterial({map: stripes.clone(), roughness: 0.6});
+    m.map.repeat.set(curve.getLength() / 120, 1);
+    m.map.needsUpdate = true;
+    add(root, new THREE.TubeGeometry(curve, 60, 7, 6), m);
+    add(root, new THREE.BoxGeometry(50, 70, 30).translate(to.x, to.y, to.z), mat.copper);
+  };
+  earth(v(1700, 0, 2200), v(1050, GROUND + 520, 1150));
+  earth(v(KTANK.x + 1500, 0, 4400), v(KTANK.x + 1000, GROUND + 900, 3300));
+  for (const x of SCANIA.xs) earth(v(x + 1450, 0, SCANIA.zRear + 900), v(x + 1000, GROUND + 1100, SCANIA.zRear - 300));
+  earth(v(RES.x - RES.r - 700, 0, RES.z + 1600), v(RES.x - RES.r * Math.cos(0.4), GROUND + 300, RES.z + RES.r * Math.sin(0.4)));
+  // two extinguishers on the road by the pickup's left side
+  for (const dz of [0, 260]) {
+    const z = -1500 + dz;
+    add(root, new THREE.CylinderGeometry(80, 80, 470, 20).translate(-1700, GROUND + 235, z), mat.red);
+    add(root, new THREE.SphereGeometry(80, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).translate(-1700, GROUND + 470, z), mat.red);
+    add(root, new THREE.BoxGeometry(40, 90, 120).translate(-1700, GROUND + 560, z), mat.black);
+    add(root, new THREE.TorusGeometry(70, 9, 6, 20, Math.PI).rotateY(Math.PI / 2).translate(-1640, GROUND + 420, z), mat.black);
+  }
+  // the drip tray's rim round the unit's frame in the bed
+  for (const [w, d, x, z] of [[1340, 16, 0, -520], [1340, 16, 0, 1110], [16, 1630, -670, 295], [16, 1630, 670, 295]]) add(root, new THREE.BoxGeometry(w, 70, d).translate(x, -110 + 35, z), mat.tray);
+  // the emergency stop: a yellow post and box with the red mushroom, by the pickup's right rear
+  add(root, new THREE.BoxGeometry(70, 1050, 70).translate(1700, GROUND + 525, 1500), mat.yellow);
+  add(root, new THREE.BoxGeometry(180, 200, 120).translate(1700, GROUND + 1150, 1500), mat.yellow);
+  add(root, new THREE.CylinderGeometry(55, 45, 50, 20).rotateZ(Math.PI / 2).translate(1610, GROUND + 1160, 1500), mat.red);
+  // the hazard sign by the path to the tank
+  {
+    const cv = document.createElement('canvas');
+    cv.width = 512;
+    cv.height = 320;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, 512, 320);
+    c.strokeStyle = '#c8161d';
+    c.lineWidth = 18;
+    c.strokeRect(9, 9, 494, 302);
+    c.fillStyle = '#c8161d';
+    c.font = '800 66px Arial';
+    c.textAlign = 'center';
+    c.fillText('ОГНЕОПАСНО', 256, 120);
+    c.fillStyle = '#1c1d1f';
+    c.font = '700 40px Arial';
+    c.fillText('НЕ КУРИТЬ · НЕ ПОДХОДИТЬ', 256, 200);
+    c.fillText('С ОТКРЫТЫМ ОГНЁМ', 256, 252);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    add(root, new THREE.BoxGeometry(50, 1500, 50).translate(3400, GROUND + 750, 1200), mat.steel);
+    add(root, new THREE.PlaneGeometry(900, 560).translate(3400, GROUND + 1700, 1230), new THREE.MeshStandardMaterial({map: t, roughness: 0.6, side: THREE.DoubleSide}));
+  }
 
   // ------------------------------------------------------------ the oil: in the tank, in the tanker, the stream into the hatch
   const resOil = add(root, new THREE.CylinderGeometry(RES.r - 25, RES.r - 25, 1, 72).translate(0, 0.5, 0), mat.oil);
@@ -260,8 +433,9 @@ export function buildSite() {
   const lenD = disCurves.map((c) => c.getLength());
 
   // ------------------------------------------------------------ the transfer, planned once over these hoses
-  const plan = planTransfer({lenS: lenS + 900, lenD: lenD.map((l) => l + 300), resR: RES.r - 25, resFloor: RES.y0});
-  const st0 = plan.state(0);
+  const planArgs = {lenS: lenS + 900, lenD: lenD.map((l) => l + 300), resR: RES.r - 25, resFloor: RES.y0};
+  let plan = planTransfer({...planArgs, cfg: CFG});
+  let st0 = plan.state(0);
 
   // ------------------------------------------------------------ what makes the levels readable
   // the tank's sight gauge: a glass tube on the shell facing the pickup, the oil column in it, a tick every 0.5 m —
@@ -286,18 +460,38 @@ export function buildSite() {
     add(gauge, new THREE.BoxGeometry(w, h % 500 === 0 ? 14 : 8, 6).rotateY(-GA).translate(gx + (60 + w / 2) * Math.cos(GA), RES.y0 + h, gz + (60 + w / 2) * Math.sin(GA) + 20), mat.tick);
   }
   // the start level, a red mark on the gauge and a red ring round the shell's oil, so the drop stays measured
-  const lv0 = RES.y0 + st0.resLevel;
-  add(gauge, new THREE.BoxGeometry(200, 22, 8).rotateY(-GA).translate(gx - 30 * Math.cos(GA), lv0, gz - 30 * Math.sin(GA) + 40), mat.mark);
-  const ring0 = add(root, new THREE.TorusGeometry(RES.r - 20, 14, 6, 120).rotateX(Math.PI / 2).translate(RES.x, lv0, RES.z), mat.target);
+  const mark0 = add(gauge, new THREE.BoxGeometry(200, 22, 8).rotateY(-GA).translate(gx - 30 * Math.cos(GA), 0, gz - 30 * Math.sin(GA) + 40), mat.mark);
+  const ring0 = add(root, new THREE.TorusGeometry(RES.r - 20, 14, 6, 120).rotateX(Math.PI / 2).translate(RES.x, 0, RES.z), mat.target);
   // each tanker's 95 % line: a red rim inside its tank where the filling has to stop
-  const rings95 = tanks.map((ta, k) => {
-    const d95 = vesselDepth(ta, plan.ends[k]);
-    const half = (ta.a - 15) * Math.sqrt(Math.max(0, 1 - ((d95 - ta.b) / (ta.b - 15)) ** 2));
-    const r = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2 * half, 1, ta.vis - 40)), new THREE.LineBasicMaterial({color: '#e0262b'}));
-    r.position.set(ta.x, ta.yc - ta.b + d95, ta.z0 + ta.vis / 2);
+  const rings95 = tanks.map(() => {
+    const r = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color: '#e0262b'}));
     root.add(r);
     return r;
   });
+  // where the start level and each tanker's fill line sit: set again whenever the conditions are
+  const place = () => {
+    const lv0 = RES.y0 + st0.resLevel;
+    mark0.position.y = lv0;
+    ring0.position.y = lv0;
+    tanks.forEach((ta, k) => {
+      const r = rings95[k];
+      r.userData.on = VESSELS[k].on;
+      if (!VESSELS[k].on) return;
+      const d = vesselDepth(VESSELS[k], plan.ends[k]);
+      const half = (ta.a - 15) * Math.sqrt(Math.max(0, 1 - ((d - ta.b) / (ta.b - 15)) ** 2));
+      r.geometry.dispose();
+      r.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(2 * half, 1, ta.vis - 40));
+      r.position.set(ta.x, ta.yc - ta.b + d, ta.z0 + ta.vis / 2);
+    });
+  };
+  place();
+  /** plan the run again under new conditions (the panel's CFG) */
+  const replan = () => {
+    plan = planTransfer({...planArgs, cfg: CFG});
+    st0 = plan.state(0);
+    place();
+    return plan;
+  };
 
   // rings spreading from where the stream hits the oil in the tanker
   const ripples = [0, 1, 2].map(() => {
@@ -317,6 +511,13 @@ export function buildSite() {
     // the Scanias: one model, three copies sharing its geometry; each its own materials, for its own section plane.
     // The scanned tank's texture reads as plastic at its own gloss: a painted steel's sheen instead. A viewer that
     // cannot decode the texture gets its mean colour.
+    // the model's own tank is a third too small: its triangles above the trailer's frame go (the frame, the axles,
+    // the cabinets stay), and a real 20 m³ tank is built in their place
+    sc.updateMatrixWorld(true);
+    const hide = new THREE.MeshBasicMaterial({visible: false});
+    sc.traverse((m) => {
+      if (m.isMesh && m.material.map) sortTris(m, (q) => (q.y > 1.27 ? 1 : 0), [m.material, hide]);
+    });
     const scs = SCANIA.xs.map(() => sc.clone(true));
     const scCuts = SCANIA.xs.map((x) => new THREE.Plane(new THREE.Vector3(-1, 0, 0), x * 0.001));
     // section planes in world units (m): the tank keeps z ≤ its axis, the tanker x ≤ its middle
@@ -370,6 +571,16 @@ export function buildSite() {
       root.add(h);
       return h;
     });
+    SCANIA.xs.forEach((x, i) => {
+      const t = buildScaniaTank();
+      t.position.x = x;
+      root.add(t);
+      t.traverse((m) => {
+        if (!m.isMesh) return;
+        m.material = m.material.clone();
+        models.push({m: m.material, cut: scCuts[i], opacity: 1, glass: false});
+      });
+    });
     holders.res = hr;
     holders.kam = hk;
     return {kamaz: new THREE.Box3().setFromObject(hk).min.toArray()};
@@ -407,7 +618,7 @@ export function buildSite() {
     resOil.scale.y = Math.max(1, st.resLevel);
     oils.forEach((o, k) => {
       const dep = st.depths[k];
-      o.visible = open && dep > 3;
+      o.visible = open && dep > 3 && VESSELS[k].on;
       if (o.visible && Math.abs(dep - o.userData.built) > 2) {
         o.geometry.dispose();
         o.geometry = segment(tanks[k], dep);
@@ -421,7 +632,7 @@ export function buildSite() {
     const surf = ta.yc - ta.b + st.depths[cur];
     gOil.scale.y = Math.max(1, Math.min(GH, st.resLevel));
     ring0.visible = open;
-    for (const r of rings95) r.visible = open;
+    for (const r of rings95) r.visible = open && r.userData.on;
     // the stream from the hose's end down to the surface while the pump runs
     stream.visible = st.running && open;
     stream.position.set(ta.hatch.x, ta.hatch.y - 120, ta.hatch.z);
@@ -447,5 +658,7 @@ export function buildSite() {
     }
     return st;
   };
-  return {root, load, update, plan, holders, at: {res: v(RES.x - RES.r * 0.7, RES.y0 + 3200, RES.z + RES.r * 0.7), kam: v(KTANK.x + 900, 1600, KTANK.zc), sc: tanks.slice(1).map((ta) => v(ta.x + 900, ta.yc + ta.b, ta.z0 + ta.vis / 2)), nozzle: NOZZLE, hatch: HATCH, hoseD: disCurves[0].getPointAt(0.45), hoseS: sucCurve.getPointAt(0.4)}};
+  return {root, load, update, replan, get plan() {
+    return plan;
+  }, holders, at: {res: v(RES.x - RES.r * 0.7, RES.y0 + 3200, RES.z + RES.r * 0.7), kam: v(KTANK.x + 900, 1600, KTANK.zc), sc: tanks.slice(1).map((ta) => v(ta.x + 900, ta.yc + ta.b, ta.z0 + ta.vis / 2)), nozzle: NOZZLE, hatch: HATCH, hoseD: disCurves[0].getPointAt(0.45), hoseS: sucCurve.getPointAt(0.4)}};
 }

@@ -1,0 +1,18 @@
+{
+ "parts": {
+  "drive_rotor": 7.13,
+  "driven_rotor": 7.13,
+  "drive_shaft": 4.34,
+  "driven_shaft": 3.68,
+  "body": 56.71,
+  "front_cover": 10.32,
+  "rear_cover": 9.14,
+  "valve_barrel": 1.58
+ },
+ "total_kg": 100.0,
+ "size_mm": [
+  345,
+  366,
+  370
+ ]
+}

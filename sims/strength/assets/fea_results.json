@@ -1,0 +1,36 @@
+{
+ "shaft": {
+  "torque_Nm": 238,
+  "lever_mm": 17.5,
+  "key_force_kN": 13.6,
+  "nodes": 246265,
+  "elements": 169367,
+  "vm_max_MPa": 93.8,
+  "vm_peak_at_load_MPa": 289.9,
+  "vm_p999_MPa": 137.5,
+  "tau_analytic_MPa": 28.2,
+  "vm_analytic_MPa": 48.9,
+  "yield_MPa": 785,
+  "safety": 8.37,
+  "material": "Сталь 40Х улучшенная"
+ },
+ "body": {
+  "pressure_MPa": 0.6,
+  "nodes": 231563,
+  "elements": 141903,
+  "loaded_nodes": 11385,
+  "sigma1_max_MPa": 6.0,
+  "vm_max_MPa": 6.9,
+  "tension_strength_MPa": 200,
+  "safety": 33.4,
+  "material": "Чугун СЧ20"
+ },
+ "teeth": {
+  "pump_torque_Nm": 49.7,
+  "Ft_N": 1035,
+  "sigma_F_MPa": 4.12,
+  "allowable_MPa": 300,
+  "safety": 73,
+  "material": "Сталь 40Х, зубья закалены"
+ }
+}

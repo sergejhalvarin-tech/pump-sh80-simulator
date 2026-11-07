@@ -151,7 +151,7 @@ export function buildTruck(add) {
    *  rear face at REAR and its tyres on the road. Its bed floor lands 904 mm up, which is where T9.floor puts the unit's
    *  frame. The drawn body then goes. */
   const loadModel = async () => {
-    const bin = Uint8Array.from(atob(MODEL_B64), (c) => c.charCodeAt(0)).buffer;
+    const bin = MODEL_B64.startsWith('url:') ? await (await fetch(MODEL_B64.slice(4))).arrayBuffer() : Uint8Array.from(atob(MODEL_B64), (c) => c.charCodeAt(0)).buffer;
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const gltf = await new Promise((ok, no) => loader.parse(bin, '', ok, no));
     const model = gltf.scene;

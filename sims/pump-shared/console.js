@@ -9,7 +9,7 @@ import {GENSET, VFD} from './supply.js';
 import {ALT, cylPsi, ENGINE, strokeOf} from './genset.js';
 import {LOAD, T9, TRAILER} from './truck.js';
 import {FILTER, HOSE, suctionBudget} from './pipes.js';
-import {OIL, PLAN, VESSELS} from './transfer.js';
+import {CFG, CFG_DEFAULT, nuAt, OIL, PLAN, PUMP_LIM, VESSELS} from './transfer.js';
 import {OIL_COL} from './site.js';
 import {DA, fillOf, flow, G, gapPressure, keyOf, P_MAX, PHASES, phaseOf, Q_REV_CM3, RATED, SEAL, travelU} from './kin.js';
 
@@ -33,6 +33,10 @@ const CSS = `
 .cur{position:absolute;left:0;top:0;z-index:50;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
 .ring{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1.5px solid ${C.red};opacity:0;z-index:49}
 .row{position:absolute;left:1329px;width:224px;display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px}
+.cfg{display:flex;align-items:center;gap:4px}
+.cfg i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:16px;height:15px;border:1px solid ${C.line};background:#fff;font-size:11px;font-weight:700;cursor:pointer;pointer-events:auto;user-select:none}
+.cfg i:hover{background:#f1f2f4}
+.cfg b{min-width:96px;text-align:center;font-size:10.5px}
 .row b{font-size:12.5px;font-weight:700}
 .off{display:none!important}
 `;
@@ -50,7 +54,7 @@ const mix = (a, b, k) => {
   return `rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * k)).join(',')})`;
 };
 
-export function createConsole(app, siteState = () => ({})) {
+export function createConsole(app, siteState = () => ({}), onCfg = null) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -497,13 +501,72 @@ export function createConsole(app, siteState = () => ({})) {
       return r.lastElementChild;
     });
   };
-  const oilRows = sRows(36, 209, `МАСЛО ${OIL.name} · ${OIL.gost}`, ['Плотность при 20 °С', 'Вязкость при 40 °С', 'Вязкость при 20 °С', 'Температура застывания', 'Температура вспышки', 'Масса в машинах', 'Масса в резервуаре']);
-  const hydRows = sRows(252, 184, 'ГИДРАВЛИКА ЛИНИИ', ['Сейчас наливается', 'Подача насоса', 'Скорость в рукаве', 'Режим течения', 'Давление вход / выход', 'Потери вход / выход']);
-  const totRows = sRows(443, 214, 'ИТОГ ПЕРЕКАЧКИ · 95 % КАЖДОЙ', [...VESSELS.map((ve) => `${ve.name} · ${ve.cap} м³`), 'Всего · время', 'кВт·ч · дизель ДГУ', 'Резервуар после']);
-  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:795px;text-align:center;font-weight:500"><span style="color:${C.ink}">НАЛИВ</span> &nbsp;— &nbsp;ВРЕМЯ УСКОРЕНО ×${PLAN.accel}; МЕЖДУ МАШИНАМИ ${PLAN.swap / 60} МИН НА ПЕРЕСТАНОВКУ РУКАВА</div>`);
-  const trLine = add(`<div style="position:absolute;left:0;right:0;top:816px;text-align:center;font-size:14px;font-weight:600"></div>`);
-  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:855px;text-align:center;font-weight:500">РАЗРЕЗ И СТЕКЛО ПОКАЗЫВАЮТ МАСЛО В РЕЗЕРВУАРЕ, ЦИСТЕРНАХ И РУКАВАХ · T — НАЧАТЬ ЗАНОВО</div>`);
-  add(`<div class="cp" style="position:absolute;left:0;right:0;top:874px;text-align:center;font-weight:500;color:${C.faint}">ТЯНИ — ПОВОРОТ &nbsp;·&nbsp; КОЛЕСО — МАСШТАБ &nbsp;·&nbsp; H — СКРЫТЬ ПАНЕЛИ</div>`);
+  // the conditions of the run, each changed with − / +; a change plans the run again (onCfg)
+  const CFG_ROWS = [
+    ['temp', 'Масло', 5, -20, 60, (v) => `${v > 0 ? '+' : ''}${v} °С · ${Math.round(nuAt(v))} мм²/с`],
+    ['hz', 'ПЧ', 5, 25, 50, (v) => `${v} Гц · ${Math.round((980 * v) / 50)} об/мин`],
+    ['kamaz', 'КАМАЗ 8 м³', 1, 0, 1, (v) => (v ? 'наливать' : 'нет')],
+    ['nScania', 'Scania', 1, 0, 3, (v) => `${v} шт`],
+    ['scCap', 'Цистерна', 5, 10, 30, (v) => `${v} м³`],
+    ['extraD', 'Рукава +', 5, 0, 40, (v) => `+${v} м`],
+    ['swapMin', 'Перестановка', 1, 0, 15, (v) => `${v} мин`],
+    ['res0', 'Резервуар', 4, 20, 76, (v) => `${v} м³`],
+  ];
+  add(`<div class="pn" data-g="charts" style="left:1318px;top:36px;width:245px;height:209px"></div>`);
+  add(`<div class="cp" data-g="charts" style="position:absolute;left:1329px;top:47px;font-weight:700">УСЛОВИЯ ПЕРЕКАЧКИ</div>`);
+  const resetCfg = add(`<div class="cp mu" data-g="charts" style="position:absolute;left:1500px;top:47px;font-weight:600;cursor:pointer;pointer-events:auto">СБРОС</div>`);
+  const cfgVals = CFG_ROWS.map(([key, name, step, lo, hi, fmt], i) => {
+    const r = add(`<div class="row" data-g="charts" style="top:${64 + i * 22}px"><span class="mu">${name}</span><span class="cfg"><i>−</i><b></b><i>+</i></span></div>`);
+    const [minus, val, plus] = r.lastElementChild.children;
+    const set = (d) => {
+      const now = typeof CFG[key] === 'boolean' ? +CFG[key] : CFG[key];
+      const next = Math.min(hi, Math.max(lo, now + d * step));
+      if (next === now) return;
+      CFG[key] = typeof CFG_DEFAULT[key] === 'boolean' ? !!next : next;
+      onCfg?.();
+    };
+    minus.addEventListener('click', (e) => (e.stopPropagation(), set(-1)));
+    plus.addEventListener('click', (e) => (e.stopPropagation(), set(1)));
+    return () => (val.textContent = fmt(typeof CFG[key] === 'boolean' ? +CFG[key] : CFG[key]));
+  });
+  resetCfg.addEventListener('click', (e) => {
+    e.stopPropagation();
+    Object.assign(CFG, CFG_DEFAULT);
+    onCfg?.();
+  });
+  const hydRows = sRows(252, 184, 'ГИДРАВЛИКА ЛИНИИ', ['Сейчас наливается', 'Подача насоса', 'Масло: ν · ρ', 'Скорость · режим', 'Давление вход / выход', 'Вакуум на входе / доп.']);
+  const totRows = sRows(443, 214, 'ИТОГ ПЕРЕКАЧКИ · 95 % КАЖДОЙ', [...VESSELS.map((ve) => ve.name), 'Всего · время', 'кВт·ч · дизель ДГУ', 'Резервуар после']);
+  add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:795px;text-align:center;font-weight:500"><span style="color:${C.ink}">НАЛИВ</span> &nbsp;— &nbsp;ВРЕМЯ УСКОРЕНО ×${PLAN.accel}; УСЛОВИЯ МЕНЯЮТСЯ СПРАВА ВВЕРХУ — РАСЧЁТ ПЕРЕСЧИТЫВАЕТСЯ СРАЗУ</div>`);
+  const trLine = add(`<div style="position:absolute;left:0;right:0;top:812px;text-align:center;font-size:14px;font-weight:600"></div>`);
+  const trWarn = add(`<div style="position:absolute;left:300px;right:300px;top:834px;text-align:center;font-size:10px;font-weight:600;color:${C.red};line-height:1.22"></div>`);
+  const trHint = add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:855px;text-align:center;font-weight:500">РАЗРЕЗ И СТЕКЛО ПОКАЗЫВАЮТ МАСЛО В РЕЗЕРВУАРЕ, ЦИСТЕРНАХ И РУКАВАХ · T — НАЧАТЬ ЗАНОВО</div>`);
+  // the safety checklist for the fill, opened from its chip; the items the model can check are ticked live
+  const SAFE = [
+    ['earth', 'Цистерны, пикап, ДГУ и резервуар заземлены до открытия люка (статическое электричество)'],
+    ['engines', 'Двигатели машин заглушены, ключи вынуты; работает только ДГУ'],
+    ['hose', 'Рукав опущен в люк до дна — налив под уровень, без падающей струи (в симуляторе струя видна для наглядности)'],
+    ['speed', 'Скорость масла в рукаве не выше 5 м/с'],
+    ['fill', 'Налив не выше 95 % — запас на тепловое расширение'],
+    ['vac', 'Разрежение на входе в пределах 5 м (паспорт насоса)'],
+    ['visc', 'Вязкость в пределах насоса 20–280 мм²/с, иначе греть масло'],
+    ['ext', 'Два огнетушителя ОП-5 у насоса, поддон и сорбент под агрегатом'],
+    ['stop', 'Кнопка аварийного останова у ПЧ проверена перед пуском'],
+    ['leak', 'После пуска осмотрены фланцы и хомуты; в грозу налив не вести'],
+  ];
+  const safeChip = add(`<div class="cp" style="position:absolute;left:640px;top:96px;width:320px;height:21px;border:1px solid ${C.line};background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;cursor:pointer;pointer-events:auto"></div>`);
+  const safePanel = add(`<div class="pn" style="left:600px;top:124px;width:400px;height:${30 + SAFE.length * 30}px;display:none;pointer-events:auto"></div>`);
+  const safeRows = SAFE.map(([, text], i) => {
+    const r = add(`<div style="position:absolute;left:612px;top:${136 + i * 30}px;width:376px;display:none;font-size:9.6px;line-height:1.25;gap:8px"><b style="display:inline-block;width:16px"></b><span>${text}</span></div>`);
+    return r;
+  });
+  let safeOpen = false;
+  safeChip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    safeOpen = !safeOpen;
+    safePanel.style.display = safeOpen ? 'block' : 'none';
+    for (const r of safeRows) r.style.display = safeOpen ? 'flex' : 'none';
+  });
+  const trCtl = add(`<div class="cp" style="position:absolute;left:0;right:0;top:874px;text-align:center;font-weight:500;color:${C.faint}">ТЯНИ — ПОВОРОТ &nbsp;·&nbsp; КОЛЕСО — МАСШТАБ &nbsp;·&nbsp; H — СКРЫТЬ ПАНЕЛИ</div>`);
   const byMode = [...ui.querySelectorAll('[data-m]')];
   let modeNow = '';
 
@@ -565,25 +628,32 @@ export function createConsole(app, siteState = () => ({})) {
         const dep = tr.depths[k] / (2 * ve.b);
         const top = b - dep * 2 * b;
         const on = k === tr.cur && tr.phase !== 'done';
+        if (!ve.on) h += `<g opacity=".3">`;
         h += `<g transform="translate(${cx} ${cy})"><ellipse rx="${a}" ry="${b}" fill="#fff" stroke="${on ? C.red : C.ink}" stroke-width="${on ? 1.8 : 1.1}"/><rect x="${-a}" y="${top.toFixed(1)}" width="${2 * a}" height="${(b - top).toFixed(1)}" fill="${OIL_COL}" opacity=".85" clip-path="url(#ve${k})"/>`;
         const y95 = b - (PLAN.fill > 0 ? 0.95 * 2 * b : 0);
         h += `<line x1="${-a}" x2="${a}" y1="${y95}" y2="${y95}" stroke="${C.red}" stroke-dasharray="2 2" stroke-width=".7"/>`;
         h += `<text y="${-b - 6}" font-size="6.6" text-anchor="middle" font-weight="${on ? 700 : 500}" fill="${on ? C.red : C.mute}">${ve.name.toUpperCase()}</text>`;
-        h += `<text y="${b + 12}" font-size="7.4" text-anchor="middle" font-weight="700" fill="${C.ink}">${f2(tr.vols[k])} / ${ve.cap} м³</text></g>`;
+        h += `<text y="${b + 12}" font-size="7.4" text-anchor="middle" font-weight="700" fill="${C.ink}">${ve.on ? `${f2(tr.vols[k])} / ${ve.cap} м³` : 'нет'}</text></g>`;
+        if (!ve.on) h += `</g>`;
       });
       h += `<text x="158" y="172" font-size="6.2" text-anchor="middle" fill="${C.red}">- - - 95 %: предел налива</text>`;
       lvSvg.innerHTML = h;
     }
     // the run: each tanker's volume against the clock, the hose changes between them shaded
     {
-      const T = tr.T;
+      const T = Math.max(1, tr.T);
       const X = (sec) => 22 + (sec / T) * 196;
-      const Y = (m3) => 112 - (m3 / 20) * 100;
+      const vMax = Math.max(8, ...VESSELS.filter((ve) => ve.on).map((ve) => ve.cap));
+      const Y = (m3) => 112 - (m3 / vMax) * 100;
       let h = '';
-      for (const m of [0, 10, 20]) h += `<text x="17" y="${Y(m) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${m}</text><line x1="${X(0)}" x2="${X(T)}" y1="${Y(m)}" y2="${Y(m)}" stroke="${C.line}" stroke-width=".6"/>`;
+      for (const m of [0, vMax / 2, vMax]) h += `<text x="17" y="${Y(m) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${m}</text><line x1="${X(0)}" x2="${X(T)}" y1="${Y(m)}" y2="${Y(m)}" stroke="${C.line}" stroke-width=".6"/>`;
       h += `<text x="2" y="9" font-size="6.5" fill="${C.mute}">м³</text>`;
-      for (let k = 1; k < VESSELS.length; k++) h += `<rect x="${X(tr.tEnd[k - 1]).toFixed(1)}" y="${Y(20)}" width="${(X(tr.tStart[k]) - X(tr.tEnd[k - 1])).toFixed(1)}" height="${Y(0) - Y(20)}" fill="#eceef1"/>`;
+      for (let n = 1; n < tr.order.length; n++) {
+        const [a0, a1] = [tr.order[n - 1], tr.order[n]];
+        h += `<rect x="${X(tr.tEnd[a0]).toFixed(1)}" y="${Y(vMax)}" width="${Math.max(0, X(tr.tStart[a1]) - X(tr.tEnd[a0])).toFixed(1)}" height="${Y(0) - Y(vMax)}" fill="#eceef1"/>`;
+      }
       VESSELS.forEach((ve, k) => {
+        if (!ve.on || !tr.tEnd[k]) return;
         const t0 = tr.tStart[k];
         const t1 = tr.tEnd[k];
         let d = '';
@@ -591,12 +661,12 @@ export function createConsole(app, siteState = () => ({})) {
           const sec = t0 + (i / 16) * (t1 - t0);
           d += `${i ? 'L' : 'M'}${X(sec).toFixed(1)} ${Y(siteState(sec).vols[k]).toFixed(1)}`;
         }
-        d += `L${X(T).toFixed(1)} ${Y(tr.ends[k]).toFixed(1)}`;
+        d += `L${X(T).toFixed(1)} ${Y(siteState(T).vols[k]).toFixed(1)}`;
         h += `<path d="${d}" fill="none" stroke="${VCOL[k]}" stroke-width="1.4"/>`;
       });
       const now = Math.min(T, tr.t);
       if (tr.cur >= 0) h += `<circle cx="${X(now).toFixed(1)}" cy="${Y(tr.vols[tr.cur]).toFixed(1)}" r="3.2" fill="${C.red}"/>`;
-      h += `<line x1="${X(now).toFixed(1)}" x2="${X(now).toFixed(1)}" y1="${Y(20)}" y2="${Y(0)}" stroke="${C.red}" stroke-width=".6"/>`;
+      h += `<line x1="${X(now).toFixed(1)}" x2="${X(now).toFixed(1)}" y1="${Y(vMax)}" y2="${Y(0)}" stroke="${C.red}" stroke-width=".6"/>`;
       h += `<line x1="${X(0)}" x2="${X(T)}" y1="${Y(0)}" y2="${Y(0)}" stroke="${C.ink}" stroke-width=".8"/>`;
       for (const k of [0, 0.25, 0.5, 0.75, 1]) h += `<text x="${X(k * T)}" y="${Y(0) + 10}" font-size="6.5" text-anchor="middle" fill="${C.mute}">${mmss(k * T)}</text>`;
       h += `<text x="${X(T)}" y="${Y(0) + 20}" font-size="6.2" letter-spacing="1" text-anchor="end" fill="${C.mute}">РЕАЛЬНОЕ ВРЕМЯ, Ч:МИН:С</text>`;
@@ -605,19 +675,36 @@ export function createConsole(app, siteState = () => ({})) {
       runTag.innerHTML = `<b style="color:${C.ink}">${mmss(now)}</b> / ${mmss(T)}`;
       runFoot.innerHTML = `Осталось <b style="color:${C.ink}">${mmss(tr.left)}</b> · налито <b style="color:${C.ink}">${f1(tr.total)}</b> м³ · <b style="color:${C.ink}">${f1(tr.mass)}</b> т`;
     }
-    const ov = [`${OIL.rho} кг/м³`, `${OIL.nu40} мм²/с (29–35)`, `≈ ${OIL.nu20} мм²/с`, `≤ ${OIL.pour} °С`, `≥ ${OIL.flash} °С`, `${f2(tr.mass)} т`, `${f1((tr.vRes * OIL.rho) / 1000)} т`];
-    oilRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${ov[i]}</b>`));
+    for (const f of cfgVals) f();
     const regime = tr.re < 2300 ? 'ламинарный' : tr.re < 4000 ? 'переходный' : 'турбулентный';
-    const hv = [tr.phase === 'fill' ? cur.name : tr.phase === 'swap' ? `стоп · рукав → ${cur.name}` : 'всё налито', `${f1(tr.q)} м³/ч · ${f1(tr.q / 3.6)} л/с`, `${f2(tr.v)} м/с`, `Re ${Math.round(tr.re)} · ${regime}`, `${tr.pIn >= 0 ? '+' : ''}${Math.round(tr.pIn * 1000)} кПа / ${f2(tr.pOut)} МПа`, `${f2(tr.lossS)} / ${f2(tr.lossD)} м`];
+    const nuWarn = tr.nu > PUMP_LIM.nuMax || tr.nu < PUMP_LIM.nuMin;
+    const vacWarn = tr.hVac > 0.8 * tr.hVacMax;
+    const hv = [tr.phase === 'fill' ? cur.name : tr.phase === 'swap' ? `стоп · рукав → ${cur.name}` : tr.stop ? 'остановлено' : 'всё налито', `${f1(tr.q)} м³/ч · ${f1(tr.q / 3.6)} л/с`, `<span style="color:${nuWarn ? C.red : 'inherit'}">${Math.round(tr.nu)} мм²/с · ${Math.round(tr.rho)} кг/м³</span>`, `${f2(tr.v)} м/с · ${regime}`, `${tr.pIn >= 0 ? '+' : ''}${Math.round(tr.pIn * 1000)} кПа / ${f2(tr.pOut)} МПа`, `<span style="color:${vacWarn ? C.red : 'inherit'}">${f2(tr.hVac)} / ${tr.hVacMax} м${tr.cav ? ' · КАВИТАЦИЯ' : ''}</span>`];
     hydRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${hv[i]}</b>`));
     const end = siteState(tr.T);
     const tv = [
-      ...VESSELS.map((ve, k) => `${f2(tr.ends[k])} м³ · ${mmss(tr.tEnd[k] - tr.tStart[k])}${k === tr.cur && tr.phase === 'fill' ? ' ▲' : tr.vols[k] >= tr.ends[k] - 1e-3 ? ' ✓' : ''}`),
-      `${f1(tr.totalEnd)} м³ · ${mmss(tr.T)}`,
+      ...VESSELS.map((ve, k) => (ve.on ? `${f2(end.vols[k])}/${f1(tr.ends[k])} м³ · ${mmss(tr.tEnd[k] - tr.tStart[k])}${k === tr.cur && tr.phase === 'fill' ? ' ▲' : tr.vols[k] >= tr.ends[k] - 1e-3 ? ' ✓' : ''}` : '— не наливаем')),
+      `${f1(end.delivered)} м³ · ${f1((end.delivered * tr.rho) / 1000)} т · ${mmss(tr.T)}`,
       `${f1(end.energy)} кВт·ч · ${f1(end.fuel)} л`,
       `${f1(end.vRes)} м³ · ${Math.round((end.vRes / PLAN.resCap) * 100)} %`,
     ];
-    totRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:11px">${tv[i]}</b>`));
+    totRows.forEach((r, i) => (r.innerHTML = `<b style="font-size:10.5px">${tv[i]}</b>`));
+    VESSELS.forEach((ve, k) => (totRows[k].previousElementSibling.textContent = `${ve.name} · ${ve.cap} м³`));
+    trWarn.innerHTML = tr.warnings.length ? tr.warnings.map((w) => `⚠ ${w}`).join('<br>') : '';
+    // the warnings take the hint's place below the totals line
+    trHint.style.visibility = tr.warnings.length > 1 ? 'hidden' : 'visible';
+    trCtl.style.visibility = tr.warnings.length > 2 ? 'hidden' : 'visible';
+    // the checklist: the live checks from the run, the rest stand as the site shows them (done)
+    const live = {speed: tr.v <= 5, fill: true, vac: !tr.cav && tr.hVac <= tr.hVacMax, visc: tr.nu >= 20 && tr.nu <= 280};
+    let bad = 0;
+    SAFE.forEach(([key], i) => {
+      const ok = live[key] ?? true;
+      if (!ok) bad++;
+      const mark = safeRows[i].firstElementChild;
+      mark.textContent = ok ? '✓' : '✗';
+      mark.style.color = ok ? '#2f9e44' : C.red;
+    });
+    safeChip.innerHTML = `<span style="color:${bad ? C.red : '#2f9e44'}">${bad ? '✗' : '✓'}</span> БЕЗОПАСНОСТЬ НАЛИВА · ${SAFE.length - bad}/${SAFE.length} ${safeOpen ? '▲' : '▼'}`;
     trLine.innerHTML = `Налито <b style="color:${C.red}">${f1(tr.total)}</b> из ${f1(tr.totalEnd)} м³ &nbsp;·&nbsp; ${tr.phase === 'fill' ? `сейчас <b>${cur.name}</b> ${f1(tr.vols[tr.cur])} м³` : tr.phase === 'swap' ? `перестановка рукава на <b>${cur.name}</b>` : 'налив закончен'} &nbsp;·&nbsp; осталось <b>${mmss(tr.left)}</b> &nbsp;·&nbsp; в резервуаре <b>${f1(tr.vRes)} м³</b>`;
   };
   /** the piping's panels: what the suction line leaves of the pump's 5 m, the hose and the filter, the gauges */

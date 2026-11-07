@@ -37,7 +37,7 @@ export function createPumpStage({canvas}) {
     tex.colorSpace = THREE.SRGBColorSpace;
     scene.background = tex;
   }
-  const camera = new THREE.PerspectiveCamera(26, 16 / 9, 0.02, 60);
+  const camera = new THREE.PerspectiveCamera(26, 16 / 9, 0.02, 160);
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: 8}));
   composer.addPass(new RenderPass(scene, camera));
   const gtao = new GTAOPass(scene, camera, 4, 4);

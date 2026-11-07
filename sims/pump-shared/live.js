@@ -10,7 +10,7 @@ import {bypassSpeed, camAt, camName, cutAt, DURATION, explodeAt, explodeOn, make
 import {EM, motorState} from './elec.js';
 import {powerState} from './supply.js';
 import {suctionBudget} from './pipes.js';
-import {PLAN} from './transfer.js';
+import {CFG, PLAN} from './transfer.js';
 import {flow, P_MAX, power, RATED, RPM_MAX, valveOpen} from './kin.js';
 import {createPumpStage} from './stage.js';
 
@@ -43,7 +43,25 @@ html,body{background:#ecedef;overflow:hidden;position:fixed;inset:0;margin:0}
 .tourchip.on i{animation:blink 1.2s steps(2) infinite}
 @keyframes blink{50%{opacity:.15}}
 .turn{position:fixed;left:0;right:0;bottom:18px;text-align:center;font:600 12px/1.4 'JetBrains Mono',monospace;letter-spacing:1px;color:#8b8f95;text-transform:uppercase;display:none}
-@media (orientation:portrait) and (max-width:820px){.turn{display:block}}
+/* a phone held upright: the scene fills the screen, the key numbers on top, the views along the bottom */
+.ph{position:fixed;left:0;right:0;z-index:5;display:none;font-family:Inter,'Segoe UI',sans-serif;color:#16181b}
+.ph.on{display:block}
+.ph-top{top:0;padding:10px 14px 8px;background:linear-gradient(#ecedeff2,#ecedefcc 75%,#ecedef00)}
+.ph-title{font-size:15px;font-weight:700;letter-spacing:-.1px}
+.ph-sub{font:600 9px 'JetBrains Mono',monospace;letter-spacing:1px;color:#6b7075;margin-top:2px;text-transform:uppercase}
+.ph-m{display:flex;gap:14px;margin-top:8px}
+.ph-m div{flex:1;min-width:0}
+.ph-m b{display:block;font-size:22px;font-weight:800;letter-spacing:-.6px;color:#d6182b;line-height:1.05}
+.ph-m span{display:block;font-size:10px;color:#6b7075;margin-top:2px}
+.ph-w{margin-top:6px;font-size:10.5px;font-weight:600;color:#d6182b;line-height:1.3}
+.ph-bot{bottom:0;padding:8px 0 calc(10px + env(safe-area-inset-bottom));background:linear-gradient(#ecedef00,#ecedefe6 30%)}
+.ph-row{display:flex;gap:6px;overflow-x:auto;padding:0 12px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.ph-row::-webkit-scrollbar{display:none}
+.ph-row button{flex:none;height:32px;padding:0 12px;border:1px solid #d8dbdf;background:#fff;color:#16181b;font:600 11px Inter,sans-serif;letter-spacing:.4px;border-radius:16px}
+.ph-row button.on{background:#16181b;color:#fff;border-color:#16181b}
+.ph-row button.red{background:#d6182b;color:#fff;border-color:#d6182b}
+.links{position:absolute;left:1318px;top:12px;width:245px;display:flex;justify-content:space-between;font:600 8.8px 'JetBrains Mono',monospace;letter-spacing:1px;pointer-events:auto}
+.links a{color:#16181b;text-decoration:none;border-bottom:1px solid #d6182b}
 `;
 
 export function runLive() {
@@ -61,8 +79,37 @@ export function runLive() {
   const st = createPumpStage({canvas});
   // the scanned pickup decodes in the background; the drawn one stands in until it is ready
   st.pump.truck.loadModel().catch((e) => console.warn('truck model', e));
-  const ui = createConsole(app, (sec) => st.pump.site.plan.state(sec));
+  // a change of the conditions on the transfer's panel plans the run again and starts it over
+  const ui = createConsole(app, (sec) => st.pump.site.plan.state(sec), () => {
+    st.pump.site.replan();
+    transferS = 0;
+  });
   st.pump.site.load().catch((e) => console.warn('site models', e));
+  // the upright phone's overlay: title and three numbers on top, the views and cuts as rows of chips below
+  const phTop = document.createElement('div');
+  phTop.className = 'ph ph-top';
+  phTop.innerHTML = '<div class="ph-title"></div><div class="ph-sub"></div><div class="ph-m"><div><b></b><span></span></div><div><b></b><span></span></div><div><b></b><span></span></div></div><div class="ph-w"></div>';
+  const phBot = document.createElement('div');
+  phBot.className = 'ph ph-bot';
+  const LBL = {hero: 'Общий', front: 'Торец', ports: 'Порты', valve: 'Клапан', rotors: 'Роторы', unit: 'Агрегат', motor: 'Мотор', power: 'Питание', genset: 'ДГУ', truck: 'Пикап', pipes: 'Трубы', site: 'Площадка', solid: 'Корпус', glass: 'Стекло', section: 'Сечение'};
+  phBot.innerHTML = `<div class="ph-row">${CAMS.map((k) => `<button data-v="${k}">${LBL[k]}</button>`).join('')}</div><div class="ph-row"><button data-p="1" class="red"></button>${CUTS.map((k) => `<button data-c="${k}">${LBL[k]}</button>`).join('')}<button data-t="1">Заново</button><button data-l="strength.html">CAD и прочность ↗</button><button data-l="report.pdf">Отчёт PDF ↗</button></div>`;
+  document.body.append(phTop, phBot);
+  const phEl = {
+    title: phTop.querySelector('.ph-title'),
+    sub: phTop.querySelector('.ph-sub'),
+    m: [...phTop.querySelectorAll('.ph-m div')].map((d) => [d.firstElementChild, d.lastElementChild]),
+    w: phTop.querySelector('.ph-w'),
+    views: [...phBot.querySelectorAll('[data-v]')],
+    cuts: [...phBot.querySelectorAll('[data-c]')],
+    play: phBot.querySelector('[data-p]'),
+  };
+  let portrait = false;
+  // the pump in CAD with its strength, and the report: pages beside this one on the site
+  const links = document.createElement('div');
+  links.className = 'links';
+  links.innerHTML = '<a href="strength.html" target="_blank">CAD · ПРОЧНОСТЬ ↗</a><a href="report.pdf" target="_blank">ОТЧЁТ PDF ↗</a>';
+  links.addEventListener('pointerdown', (e) => e.stopPropagation());
+  app.appendChild(links);
   const tourCursor = makeCursor(ui);
   const frameConsole = makeConsoleFrame(ui, st);
 
@@ -76,6 +123,21 @@ export function runLive() {
   let tier = light ? 2 : 0;
   let scale = 1;
   const fit = () => {
+    portrait = innerHeight > innerWidth && innerWidth < 820;
+    phTop.classList.toggle('on', portrait);
+    phBot.classList.toggle('on', portrait);
+    if (portrait) {
+      // the canvas leaves the 1600 × 900 console for the whole screen, at the screen's own shape
+      if (canvas.parentNode !== document.body) document.body.prepend(canvas);
+      canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:0';
+      app.style.visibility = 'hidden';
+      scale = innerWidth / 900;
+      st.resize(innerWidth, innerHeight, clamp(devicePixelRatio || 1, 0.75, TIERS[tier].pr));
+      return;
+    }
+    if (canvas.parentNode !== app) app.prepend(canvas);
+    canvas.style.cssText = '';
+    app.style.visibility = '';
     const h = innerHeight - top;
     scale = Math.min(innerWidth / W, h / H);
     app.style.transform = `translate(${(innerWidth - W * scale) / 2}px, ${top + (h - H * scale) / 2}px) scale(${scale})`;
@@ -190,6 +252,17 @@ export function runLive() {
       pulseBtn(k);
       setView(k);
     });
+  phBot.addEventListener('pointerdown', (e) => e.stopPropagation());
+  phBot.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    takeOver();
+    if (b.dataset.v) setView(b.dataset.v);
+    if (b.dataset.c) cut = b.dataset.c;
+    if (b.dataset.p) ui.btn.pause.click();
+    if (b.dataset.t) transferS = 0;
+    if (b.dataset.l) open(b.dataset.l, '_blank');
+  });
   for (const k of CUTS)
     ui.btn[k].addEventListener('click', () => {
       takeOver();
@@ -395,7 +468,10 @@ export function runLive() {
     const k = 1 - Math.exp(-dt / (AP.on ? 0.18 : 0.45));
     cam.az += wrap(tgt.az - cam.az) * k;
     for (const key of ['tx', 'ty', 'tz', 'el', 'd', 'sx', 'sy']) cam[key] += (tgt[key] - cam[key]) * k;
-    st.frame(phi, {...cam, az: cam.az * D2R, el: cam.el * D2R}, {cut, p: pRun, open: valveOpen(pRun, dir), flowS, bypassS, flow: ov.flow, arrows: ov.arrows, isolate: isoK, explode: exK, dir, motor: motorK, elec, cosPhi: ms.cos, load: ms.k, power: powerS, supply: supplyK, site: siteK, pv: view === 'site' ? tr.pIn : suctionBudget(Math.max(0.1, fl.th - fl.leak)).pv, transferS, oilRun, genAngle, genLoad: powerState(ms, power(n, pRun), 0, EM).load});
+    // upright, the narrower view backs off so the scene still fits across, and the console's screen shift goes
+    const back = portrait ? clamp(16 / 9 / (innerWidth / innerHeight), 1, 4) ** 0.72 : 1;
+    const shot = portrait ? {...cam, d: cam.d * back, sx: 0, sy: 0} : cam;
+    st.frame(phi, {...shot, az: cam.az * D2R, el: cam.el * D2R}, {cut, p: pRun, open: valveOpen(pRun, dir), flowS, bypassS, flow: ov.flow, arrows: ov.arrows, isolate: isoK, explode: exK, dir, motor: motorK, elec, cosPhi: ms.cos, load: ms.k, power: powerS, supply: supplyK, site: siteK, pv: view === 'site' ? tr.pIn : suctionBudget(Math.max(0.1, fl.th - fl.leak)).pv, transferS, oilRun, genAngle, genLoad: powerState(ms, power(n, pRun), 0, EM).load});
 
     ui.root.style.display = hidden ? 'none' : '';
     for (const n of ui.root.querySelectorAll('[data-g="charts"]')) n.style.visibility = ov.charts ? '' : 'hidden';
@@ -413,6 +489,24 @@ export function runLive() {
       transferS,
       live: {overlays: {...ov}, cut, paused, reverse, playText: playText(PLAYS[playI]), playK: playI / (PLAYS.length - 1)},
     });
+    if (portrait && T - (phEl.at ?? -1) > 0.2) {
+      phEl.at = T;
+      const f1 = (x) => x.toFixed(1).replace('.', ',');
+      const mm = (sec) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}`;
+      phEl.title.textContent = view === 'site' ? 'Перекачка И-20А' : 'Насос Ш80-2,5';
+      phEl.sub.textContent = `${LBL[view]} · ${LBL[cut]}${AP.on ? ' · автоэкскурсия' : ''}`;
+      const m = view === 'site'
+        ? [[`${f1(tr.total)} м³`, `налито из ${f1(tr.totalEnd)}`], [tr.phase === 'fill' ? `${Math.round(tr.curProgress * 100)} %` : tr.phase === 'swap' ? 'рукав' : '✓', tr.cur >= 0 ? tr.phase === 'swap' ? `перестановка → ${['КАМАЗ', 'Scania 1', 'Scania 2', 'Scania 3'][tr.cur]}` : ['КАМАЗ', 'Scania 1', 'Scania 2', 'Scania 3'][tr.cur] : 'всё налито'], [mm(tr.left), 'осталось, ч:мин']]
+        : [[`${f1(fl.net)}`, 'подача, м³/ч'], [`${pRun.toFixed(2).replace('.', ',')}`, 'давление, МПа'], [`${f1(power(n, pRun))}`, 'мощность, кВт']];
+      phEl.m.forEach(([b, sp], i) => {
+        b.textContent = m[i][0];
+        sp.textContent = m[i][1];
+      });
+      phEl.w.innerHTML = view === 'site' ? tr.warnings.map((w) => `⚠ ${w}`).join('<br>') : '';
+      for (const b of phEl.views) b.classList.toggle('on', b.dataset.v === view);
+      for (const b of phEl.cuts) b.classList.toggle('on', b.dataset.c === cut);
+      phEl.play.textContent = paused ? '▶ Пуск' : '❚❚ Пауза';
+    }
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);
       tourChip.innerHTML = AP.on ? '<i></i>АВТОЭКСКУРСИЯ · НАЖМИТЕ, ЧТОБЫ УПРАВЛЯТЬ' : '▶ ПРОДОЛЖИТЬ ЭКСКУРСИЮ';
@@ -425,7 +519,7 @@ export function runLive() {
   };
   // every shader compiles at once before the first frame (kit/warm.js)
   warmComposer(st.renderer, st.composer, st.scene, st.camera).then(() => requestAnimationFrame(frame));
-  window.LIVE = {st, cam, startTour, takeOver, get tier() {
+  window.LIVE = {st, cam, cfg: CFG, setView, startTour, takeOver, get tier() {
     return tier;
   }, get T() {
     return T;
